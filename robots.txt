@@ -1,0 +1,13 @@
+# Crawling is deliberately allowed here.
+#
+# Indexing is blocked by <meta name="robots" content="noindex, nofollow">
+# in index.html. A crawler has to fetch the page to read that tag, so a
+# blanket "Disallow: /" would be counterproductive: it would stop crawlers
+# seeing the noindex, and a URL that is disallowed but linked from elsewhere
+# can still end up listed in search results.
+#
+# Allowing the fetch and serving noindex is the combination that reliably
+# keeps the site out of search results.
+
+User-agent: *
+Allow: /
