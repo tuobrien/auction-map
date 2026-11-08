@@ -1542,13 +1542,32 @@ window.__model = {
   REL_ANCHORS, BED_FACTOR
 };
 
-/* Offline support, for when this page is served from your own host.
-   Service workers are blocked inside the claude.ai artifact frame, so this
-   is best-effort and stays silent when it cannot register. */
+/* Offline support and self-updating, for when this page is served from your
+   own host. Service workers are blocked inside the claude.ai artifact frame,
+   so all of this is best-effort and stays silent when it cannot register.
+
+   The point of the update checks: this app's whole value is current auction
+   data, so it must never sit on a stale copy waiting to be manually cleared.
+   It asks for a newer build on launch and whenever you return to it, and
+   reloads once a new worker takes control. */
 try{
   if("serviceWorker" in navigator && location.protocol==="https:"){
-    window.addEventListener("load", ()=>{
-      navigator.serviceWorker.register("sw.js").catch(()=>{});
+    window.addEventListener("load", async ()=>{
+      try{
+        const reg = await navigator.serviceWorker.register("sw.js");
+        reg.update().catch(()=>{});
+        document.addEventListener("visibilitychange", ()=>{
+          if(!document.hidden) reg.update().catch(()=>{});
+        });
+      }catch(_){}
+    });
+
+    // reload once when a new worker takes over, guarded against looping
+    let reloading=false;
+    navigator.serviceWorker.addEventListener("controllerchange", ()=>{
+      if(reloading) return;
+      reloading=true;
+      location.reload();
     });
   }
 }catch(e){}

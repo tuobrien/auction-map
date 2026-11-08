@@ -31,6 +31,10 @@ interface, and each lot shows its full workings.
 
 ## Updating
 
-`index.html` is refreshed weekly from the live auction catalogues. After any
-change to it, bump `CACHE` at the top of `sw.js` (`auction-map-v1` → `v2`) or
-browsers will keep serving the cached copy.
+`index.html` is refreshed weekly from the live auction catalogues and the app
+picks that up on its own: the service worker serves the document network-first,
+asks for a newer build whenever the app is opened or returned to, and reloads
+once a new worker takes over.
+
+Bump `CACHE` in `sw.js` only when you change the icons or the manifest. New
+auction data needs no bump.
