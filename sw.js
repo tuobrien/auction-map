@@ -4,7 +4,7 @@
    opens instantly and works with no signal. Bump CACHE whenever you upload a
    new index.html, or the old one will keep being served.  */
 
-const CACHE = "auction-map-v2";
+const CACHE = "auction-map-v3";
 
 const ASSETS = [
   "./",

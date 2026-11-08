@@ -90,12 +90,11 @@ header.top{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;justify-con
   .title h1{font-size:23px}
   .title p{display:none}
   .stamp{margin-bottom:7px;font-size:11px}
-  .stats{gap:0;margin-top:10px;overflow-x:auto;-webkit-overflow-scrolling:touch;
-         scrollbar-width:none;padding-bottom:2px}
-  .stats::-webkit-scrollbar{display:none}
-  .stat{flex:0 0 auto;padding-right:20px}
-  .stat .n{font-size:21px}
-  .stat .l{font-size:10px;white-space:nowrap}
+  .stats{display:grid;grid-template-columns:repeat(3,auto);justify-content:start;
+         gap:9px 20px;margin-top:11px;overflow:visible}
+  .stat{padding-right:0}
+  .stat .n{font-size:20px}
+  .stat .l{font-size:9.5px;white-space:nowrap}
 
   /* one section at a time */
   .grid{display:block}
@@ -298,7 +297,8 @@ dl.kv.work{padding:0}
 dl.kv.work div{font-size:12.5px;padding:5px 0}
 dl.kv.work dt{color:var(--ink-3);flex:1}
 dl.kv.work dd{font-variant-numeric:tabular-nums;font-weight:500}
-.ovin{width:92px;text-align:right;font:inherit;font-size:12.5px;font-variant-numeric:tabular-nums;
+.ovwrap{display:inline-flex;align-items:center;gap:1px;color:var(--ink-3);font-size:12.5px}
+.ovin{width:88px;text-align:right;font:inherit;font-size:12.5px;font-variant-numeric:tabular-nums;
   border:1px solid var(--line);border-radius:5px;padding:2px 5px;background:#fff;color:var(--ink)}
 .ovin:focus{outline:2px solid var(--ink);outline-offset:-1px}
 .dNote{margin:11px 15px;padding:9px 11px;background:#fdf6e8;border:1px solid #f0e2c4;border-radius:7px;font-size:12px;color:#705a22;line-height:1.5}
@@ -326,7 +326,7 @@ dl.kv.work dd{font-variant-numeric:tabular-nums;font-weight:500}
 
   <header class="top">
     <div class="title">
-      <span class="stamp">Data as at <b id="asAt">7 November 2026</b> &middot; refreshes monthly</span>
+      <span class="stamp">Data as at <b id="asAt">7 November 2026</b> &middot; refreshes weekly</span>
       <h1>London Short-Lease Auction Lots</h1>
       <p>2+ bedrooms &middot; guide price under &pound;300,000 &middot; lease under 130 years &middot; three catalogues, November 2026</p>
     </div>
@@ -1174,9 +1174,9 @@ function valuationBlock(p){
     </div>
     <dl class="kv work">
       ${row("Est. freehold value",
-            `<input class="ovin" type="number" step="5000" min="0"
+            `<span class="ovwrap">\u00a3<input class="ovin" type="number" step="5000" min="0"
                     value="${Math.round(m.fhvp)}" data-ov="${p.lot}"
-                    aria-label="Freehold value override">${ov}`)}
+                    aria-label="Freehold value override"></span>${ov}`)}
       ${p.fhvpOverride
         ? row("Basis", "your figure")
         : row(`${LOT_BORO[p.lot]} flats, ${LOT_DIST[p.lot]} adj.`,
