@@ -1,0 +1,1537 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>London Short-Lease Auction Map — November 2026</title>
+<!-- Home-screen app on iOS: full screen, own icon, no browser chrome.
+     Safe-area insets are honoured throughout because viewport-fit is cover. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Auction Map">
+<meta name="theme-color" content="#f7f6f3">
+<link rel="apple-touch-icon" sizes="180x180" href="icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet">
+<style>
+/* ---------- Design tokens ---------------------------------------------- */
+:root{
+  --bg:#f7f6f3; --card:#fff; --ink:#1b1a18; --ink-2:#55514b; --ink-3:#8b857c;
+  --line:#e3e0d9; --line-2:#efece6; --land:#e9e6df; --land-hi:#dcd7cd;
+  --accent:#1b1a18;
+  --b1:#b4232a; --b2:#d9700f; --b3:#b8921f; --b4:#2e7d5b; --b5:#4a6fa5; --b0:#9a948b;
+  /* transport mode colours — used purely as data encoding */
+  --mT:#c9242a; --mO:#e07b14; --mN:#1f3f7a; --mD:#0f9b99; --mE:#6950a1;
+  --radius:10px; --shadow:0 1px 2px rgba(27,26,24,.05),0 8px 24px rgba(27,26,24,.06);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);
+  color:var(--ink);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+h1,h2,h3{margin:0;font-weight:600;letter-spacing:-.01em}
+
+.wrap{max-width:1500px;margin:0 auto;padding:24px 20px 48px}
+header.top{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;justify-content:space-between;margin-bottom:20px}
+.title h1{font-family:Newsreader,Georgia,serif;font-size:30px;font-weight:500;letter-spacing:-.02em}
+.title p{margin:4px 0 0;color:var(--ink-3);font-size:13px}
+.stats{display:flex;gap:24px}
+.stat .n{font-family:Newsreader,Georgia,serif;font-size:26px;line-height:1.1}
+.stat .l{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-3);margin-top:2px}
+
+.grid{display:grid;grid-template-columns:272px minmax(0,1fr) 340px;gap:16px;align-items:start}
+@media(max-width:1200px){.grid{grid-template-columns:260px minmax(0,1fr)} .detailCol{grid-column:1/-1}}
+@media(max-width:860px){.grid{grid-template-columns:1fr}}
+.leftcol{display:grid;gap:16px}
+
+/* ---------- Ranking model controls ------------------------------------- */
+.mIntro{margin:0 0 14px;font-size:12px;color:var(--ink-3);line-height:1.5}
+.mIntro em{color:var(--ink-2);font-style:normal;font-weight:600}
+.mSect{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-3);
+  font-weight:600;margin:14px 0 8px;padding-top:12px;border-top:1px solid var(--line-2)}
+.mSect:first-child{margin-top:0;padding-top:0;border-top:none}
+.mRow{margin-bottom:11px}
+.mRow label{display:flex;justify-content:space-between;align-items:baseline;gap:8px;
+  font-size:12.5px;color:var(--ink-2);margin-bottom:1px}
+.mRow label b{font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
+.mRow .hint{font-size:11px;color:var(--ink-3);line-height:1.4;margin-top:1px}
+.mWarn{background:#fdf6e8;border:1px solid #f0e2c4;border-radius:7px;padding:8px 10px;
+  font-size:11.5px;color:#705a22;line-height:1.5;margin-top:12px}
+
+/* margin figure colours */
+.mg-pos{color:#2e7d5b} .mg-mid{color:#b8921f} .mg-neg{color:#b4232a}
+
+/* ---------- Phone layout ------------------------------------------------
+   On a phone the three-column desktop grid becomes one section at a time,
+   chosen from a thumb-reachable tab bar, with the lot detail as a sheet
+   that slides up over whatever you were looking at. */
+.tabbar{display:none}
+.grab,.sheetBack,#sheetClose{display:none}
+
+@media (max-width:760px){
+  /* App shell. The document itself never scrolls — .wrap is the scroller —
+     so the tab bar cannot be shifted by momentum scrolling or by iOS
+     resizing the viewport as its toolbars show and hide. */
+  html,body{height:100%;overflow:hidden;overscroll-behavior:none}
+  .wrap{height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;
+        overscroll-behavior:contain;
+        padding:12px 11px calc(84px + env(safe-area-inset-bottom));
+        padding-left:calc(11px + env(safe-area-inset-left));
+        padding-right:calc(11px + env(safe-area-inset-right))}
+  /* the methodology note belongs with the model, not under every tab */
+  .foot{display:none}
+  body.t-model .foot{display:block}
+
+  header.top{display:block;margin-bottom:12px}
+  .title h1{font-size:23px}
+  .title p{display:none}
+  .stamp{margin-bottom:7px;font-size:11px}
+  .stats{gap:0;margin-top:10px;overflow-x:auto;-webkit-overflow-scrolling:touch;
+         scrollbar-width:none;padding-bottom:2px}
+  .stats::-webkit-scrollbar{display:none}
+  .stat{flex:0 0 auto;padding-right:20px}
+  .stat .n{font-size:21px}
+  .stat .l{font-size:10px;white-space:nowrap}
+
+  /* one section at a time */
+  .grid{display:block}
+  .leftcol{display:contents}
+  #panelFilters,#panelModel,#panelMap,#panelList{display:none}
+  body.t-filters #panelFilters,
+  body.t-model   #panelModel,
+  body.t-map     #panelMap,
+  body.t-list    #panelList{display:block}
+
+  /* map fills the screen in its own tab */
+  svg.map{height:calc(100dvh - 268px);min-height:258px}
+  .legend{left:8px;bottom:8px;padding:7px 9px}
+  .legend .row{font-size:10.5px}
+  .tubekey{right:8px;bottom:8px;padding:7px 9px;max-width:132px}
+  .tubekey .row{font-size:10px}
+  .mapctl button{width:38px;height:38px}
+  .layers button{padding:8px 11px;font-size:12px}
+  .tip{display:none !important}          /* no hover on touch — tap opens the sheet */
+
+  /* bigger targets */
+  .listwrap{max-height:none}
+  .row{padding:13px 13px;grid-template-columns:42px 1fr auto}
+  .chip{padding:8px 14px;font-size:13px}
+  .opt{padding:9px 0}
+  .seg button{padding:7px 12px}
+  input[type=range]{height:30px}
+  .btn{padding:12px}
+
+  /* detail becomes a bottom sheet */
+  .sheetBack{display:block;position:fixed;inset:0;background:rgba(27,26,24,.42);
+    opacity:0;pointer-events:none;transition:opacity .22s;z-index:39}
+  body.sheet-open .sheetBack{opacity:1;pointer-events:auto}
+  #detail{position:fixed;left:0;right:0;bottom:0;top:auto;z-index:40;
+    border-radius:18px 18px 0 0;border-bottom:none;max-height:88dvh;
+    display:flex;flex-direction:column;
+    transform:translateY(103%);transition:transform .26s cubic-bezier(.2,.8,.2,1);
+    box-shadow:0 -8px 40px rgba(27,26,24,.26)}
+  body.sheet-open #detail{transform:translateY(0)}
+  #detail .hd{flex:none}
+  #dBody{overflow-y:auto;-webkit-overflow-scrolling:touch;
+         padding-bottom:calc(10px + env(safe-area-inset-bottom))}
+  .grab{display:block;width:38px;height:4px;border-radius:99px;background:var(--line);
+    margin:8px auto 0;flex:none}
+  #sheetClose{display:inline-block}
+
+  /* tab bar */
+  .tabbar{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:45;
+    background:rgba(247,246,243,.94);-webkit-backdrop-filter:saturate(180%) blur(14px);
+    backdrop-filter:saturate(180%) blur(14px);border-top:1px solid var(--line);
+    padding-bottom:env(safe-area-inset-bottom)}
+  .tabbar button{flex:1;border:none;background:none;font:inherit;font-size:10.5px;
+    font-weight:600;letter-spacing:.02em;color:var(--ink-3);cursor:pointer;
+    padding:11px 2px 10px;min-height:52px;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:3px;
+    -webkit-tap-highlight-color:transparent}
+  .tabbar button svg{width:21px;height:21px;stroke:currentColor;fill:none;
+    stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  .tabbar button[aria-pressed="true"]{color:var(--ink)}
+  .tabbar .badge{position:absolute;transform:translate(15px,-4px);background:var(--ink);
+    color:#fff;font-size:9px;font-weight:700;border-radius:99px;padding:1px 5px;line-height:1.5}
+
+  .foot{font-size:11.5px}
+}
+@media (max-width:760px) and (display-mode:standalone){
+  /* installed to the home screen — reclaim the space a browser bar would use */
+  .wrap{padding-top:calc(10px + env(safe-area-inset-top))}
+}
+
+.panel{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+.panel .hd{padding:13px 15px;border-bottom:1px solid var(--line-2);display:flex;justify-content:space-between;align-items:center;gap:10px}
+.panel .hd h2{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-3);font-weight:600}
+.panel .bd{padding:14px 15px}
+
+/* ---------- Filters ----------------------------------------------------- */
+.fgroup{margin-bottom:18px}
+.fgroup:last-child{margin-bottom:0}
+.flabel{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-3);font-weight:600;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.opt{display:flex;align-items:center;gap:9px;padding:5px 0;cursor:pointer;font-size:13px;user-select:none}
+.opt input{accent-color:var(--accent);width:15px;height:15px;cursor:pointer;flex:none}
+.opt .sw{width:11px;height:11px;border-radius:50%;flex:none}
+.opt .cnt{margin-left:auto;color:var(--ink-3);font-size:12px;font-variant-numeric:tabular-nums}
+.opt.off{opacity:.42}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:#fff;border-radius:99px;padding:5px 11px;font-size:12.5px;cursor:pointer;font-family:inherit;color:var(--ink-2)}
+.chip[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
+/* segmented mode toggle */
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;background:var(--line-2)}
+.seg button{border:none;background:none;font:inherit;font-size:11px;font-weight:600;letter-spacing:.04em;
+  text-transform:uppercase;padding:4px 9px;cursor:pointer;color:var(--ink-3)}
+.seg button[aria-pressed="true"]{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.07)}
+input[type=range]{width:100%;accent-color:var(--accent);margin:3px 0}
+.rangeval{display:flex;justify-content:space-between;font-size:12px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.sublabel{font-size:11.5px;color:var(--ink-3);display:flex;justify-content:space-between;margin-top:6px}
+.sublabel b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+.linkbtn{background:none;border:none;padding:0;font:inherit;font-size:12px;color:var(--ink-3);text-decoration:underline;cursor:pointer}
+
+/* ---------- Map --------------------------------------------------------- */
+.mapwrap{position:relative;background:#fbfaf8;border-radius:var(--radius);overflow:hidden}
+svg.map{display:block;width:100%;height:auto;touch-action:none;cursor:grab}
+svg.map.drag{cursor:grabbing}
+.boro{fill:var(--land);stroke:#fbfaf8;stroke-width:1.1;transition:fill .12s}
+.boro.hot{fill:var(--land-hi)}
+.borolab{font-size:7.5px;letter-spacing:.09em;text-transform:uppercase;fill:#a39c91;pointer-events:none;text-anchor:middle;font-weight:600}
+.stn{fill:none;stroke:#b9b2a6;stroke-width:1.1;stroke-dasharray:2.5 2.5;pointer-events:none}
+.stnDot{fill:#fff;stroke:#8b857c;stroke-width:1.3;pointer-events:none}
+.stnLab{font-size:6.5px;fill:#8b857c;pointer-events:none;text-anchor:middle;font-weight:600}
+.pin{cursor:pointer}
+.pin circle.dot{stroke:#fff;stroke-width:1.6;transition:r .12s}
+.pin:hover circle.dot{stroke-width:2.4}
+.pin.sel circle.halo{opacity:1}
+.pin circle.halo{fill:none;stroke:var(--ink);stroke-width:1.6;opacity:0;transition:opacity .12s}
+.mapctl{position:absolute;top:12px;right:12px;display:flex;flex-direction:column;gap:5px}
+.mapctl button{width:30px;height:30px;border:1px solid var(--line);background:#fff;border-radius:7px;cursor:pointer;font-size:15px;line-height:1;color:var(--ink-2);box-shadow:var(--shadow);font-family:inherit}
+.mapctl button:hover{background:var(--bg)}
+.mapctl button[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
+.legend{position:absolute;left:12px;bottom:12px;background:rgba(255,255,255,.94);border:1px solid var(--line);border-radius:8px;padding:9px 11px;box-shadow:var(--shadow)}
+.legend .t{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-3);font-weight:600;margin-bottom:6px}
+.legend .row{display:flex;align-items:center;gap:7px;font-size:11.5px;padding:1.5px 0;color:var(--ink-2)}
+.legend .sw{width:9px;height:9px;border-radius:50%}
+/* Tube overlay */
+.tubeline{fill:none;stroke-width:2.1;stroke-linecap:round;stroke-linejoin:round;opacity:.78;
+  pointer-events:none;vector-effect:non-scaling-stroke}
+.layers{position:absolute;top:12px;left:12px;display:flex;gap:5px}
+.layers button{border:1px solid var(--line);background:rgba(255,255,255,.94);border-radius:7px;
+  padding:5px 9px;font:inherit;font-size:11.5px;color:var(--ink-2);cursor:pointer;box-shadow:var(--shadow)}
+.layers button:hover{background:#fff}
+.layers button[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
+.tubekey{position:absolute;right:12px;bottom:12px;background:rgba(255,255,255,.94);border:1px solid var(--line);
+  border-radius:8px;padding:9px 11px;box-shadow:var(--shadow);max-width:168px}
+.tubekey .t{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-3);font-weight:600;margin-bottom:6px}
+.tubekey .row{display:flex;align-items:center;gap:7px;font-size:11px;padding:1px 0;color:var(--ink-2)}
+.tubekey .sw{width:13px;height:3px;border-radius:2px;flex:none}
+
+/* Hover card — interactive, and a link through to the advertised lot */
+.tip{position:absolute;display:block;text-decoration:none;background:var(--ink);color:#fff;
+  padding:9px 11px 8px;border-radius:8px;font-size:12px;opacity:0;pointer-events:none;
+  transition:opacity .12s;z-index:6;transform:translate(-50%,-100%);width:max-content;max-width:250px;
+  box-shadow:0 6px 20px rgba(0,0,0,.26);cursor:pointer}
+.tip.on{opacity:1;pointer-events:auto}
+.tip:hover{background:#2c2a27}
+.tip b{font-weight:600;display:block;line-height:1.3}
+.tip .s{opacity:.74;font-size:11px;display:block;margin-top:3px;line-height:1.45}
+.tip .go{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:7px;
+  padding-top:6px;border-top:1px solid rgba(255,255,255,.22);font-size:11px;font-weight:600}
+.tip .go u{text-decoration:none;border-bottom:1px solid rgba(255,255,255,.5)}
+/* invisible bridge so the pointer can travel from pin to card */
+.tip::after{content:"";position:absolute;left:0;right:0;top:100%;height:14px}
+
+/* ---------- Mode badges ------------------------------------------------- */
+.mb{display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.04em;color:#fff;
+    border-radius:3px;padding:1.5px 4px;margin-right:3px;vertical-align:1px}
+.mbT{background:var(--mT)} .mbO{background:var(--mO)} .mbN{background:var(--mN)}
+.mbD{background:var(--mD)} .mbE{background:var(--mE)}
+
+/* ---------- List -------------------------------------------------------- */
+.listwrap{max-height:620px;overflow-y:auto}
+.row{display:grid;grid-template-columns:40px 1fr auto;gap:10px;padding:11px 15px;border-bottom:1px solid var(--line-2);cursor:pointer;align-items:center}
+.row:last-child{border-bottom:none}
+.row:hover{background:#faf9f6}
+.row.sel{background:#f3f1ec}
+.row .lot{font-size:10.5px;font-weight:600;color:#fff;background:var(--b0);border-radius:5px;padding:3px 0;text-align:center;font-variant-numeric:tabular-nums}
+.row .addr{font-weight:500;font-size:13px;line-height:1.3}
+.row .meta{font-size:11.5px;color:var(--ink-3);margin-top:2px}
+.row .trans{font-size:11.5px;color:var(--ink-2);margin-top:3px}
+.row .right{text-align:right}
+.row .price{font-weight:600;font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.row .yrs{font-size:11.5px;font-weight:600;margin-top:2px}
+.row .walk{font-size:11px;color:var(--ink-3);margin-top:3px;font-variant-numeric:tabular-nums}
+.row .mgn{font-size:12px;font-weight:700;margin-top:5px;font-variant-numeric:tabular-nums}
+.row .mgn.mg-nd{color:var(--ink-3);font-weight:500;font-size:11px}
+.row .allin{font-size:11px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.empty{padding:34px 16px;text-align:center;color:var(--ink-3);font-size:13px}
+
+/* ---------- Detail ------------------------------------------------------ */
+.dEmpty{padding:30px 16px;color:var(--ink-3);font-size:13px;text-align:center;line-height:1.6}
+.dHead{padding:15px}
+.dLot{display:inline-block;font-size:10.5px;font-weight:600;color:#fff;border-radius:5px;padding:3px 8px;margin-bottom:8px}
+.dAddr{font-family:Newsreader,Georgia,serif;font-size:19px;line-height:1.25;font-weight:500}
+.dSub{color:var(--ink-3);font-size:12.5px;margin-top:3px}
+.dBand{margin:13px 15px;padding:11px 13px;border-radius:8px;color:#fff}
+.dBand .v{font-family:Newsreader,Georgia,serif;font-size:25px;line-height:1}
+.dBand .k{font-size:11px;opacity:.9;text-transform:uppercase;letter-spacing:.06em;margin-top:3px}
+.dBand .note{font-size:11.5px;opacity:.95;margin-top:7px;line-height:1.45;border-top:1px solid rgba(255,255,255,.28);padding-top:7px}
+dl.kv{margin:0;padding:0 15px 4px}
+dl.kv div{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid var(--line-2);font-size:13px}
+dl.kv dt{color:var(--ink-3)}
+dl.kv dd{margin:0;text-align:right;font-weight:500}
+.sect{margin:14px 15px 0}
+.sectT{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-3);font-weight:600;margin-bottom:8px}
+.stnCard{border:1px solid var(--line);border-radius:8px;padding:9px 11px;margin-bottom:7px}
+.stnCard .n{font-weight:600;font-size:13px;display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.stnCard .n span.w{font-weight:500;color:var(--ink-3);font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.stnCard .ln{font-size:11.5px;color:var(--ink-3);margin-top:4px;line-height:1.45}
+.verdict{font-size:12px;line-height:1.5;color:var(--ink-2);background:#f3f6f4;border:1px solid #dfe8e3;border-radius:7px;padding:8px 10px;margin-top:2px}
+.headline{display:flex;align-items:baseline;gap:9px;margin-bottom:4px}
+.headline .v{font-family:Newsreader,Georgia,serif;font-size:26px;line-height:1;font-weight:500}
+.headline .k{font-size:11.5px;color:var(--ink-3)}
+dl.kv.work{padding:0}
+dl.kv.work div{font-size:12.5px;padding:5px 0}
+dl.kv.work dt{color:var(--ink-3);flex:1}
+dl.kv.work dd{font-variant-numeric:tabular-nums;font-weight:500}
+.ovin{width:92px;text-align:right;font:inherit;font-size:12.5px;font-variant-numeric:tabular-nums;
+  border:1px solid var(--line);border-radius:5px;padding:2px 5px;background:#fff;color:var(--ink)}
+.ovin:focus{outline:2px solid var(--ink);outline-offset:-1px}
+.dNote{margin:11px 15px;padding:9px 11px;background:#fdf6e8;border:1px solid #f0e2c4;border-radius:7px;font-size:12px;color:#705a22;line-height:1.5}
+.dLinks{padding:13px 15px 16px;display:grid;gap:7px}
+.btn{display:block;text-align:center;padding:9px 12px;border-radius:7px;font-size:13px;font-weight:500;text-decoration:none;border:1px solid var(--line);color:var(--ink);background:#fff}
+.btn:hover{background:var(--bg)}
+.btn.pri{background:var(--ink);color:#fff;border-color:var(--ink)}
+.btn.pri:hover{opacity:.88}
+.foot{margin-top:22px;color:var(--ink-3);font-size:12px;line-height:1.65;max-width:980px}
+.foot a{color:var(--ink-2)}
+.stamp{display:inline-block;background:#fff;border:1px solid var(--line);border-radius:99px;
+  padding:3px 10px;font-size:11.5px;color:var(--ink-3);margin-bottom:10px}
+.stamp b{color:var(--ink-2);font-weight:600}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="title">
+      <span class="stamp">Data as at <b id="asAt">7 November 2026</b> &middot; refreshes monthly</span>
+      <h1>London Short-Lease Auction Lots</h1>
+      <p>2+ bedrooms &middot; guide price under &pound;300,000 &middot; lease under 130 years &middot; three catalogues, November 2026</p>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="n" id="sCount">0</div><div class="l">Shown</div></div>
+      <div class="stat"><div class="n" id="sMedian">&mdash;</div><div class="l">Median guide</div></div>
+      <div class="stat"><div class="n" id="sLease">&mdash;</div><div class="l">Median lease</div></div>
+      <div class="stat"><div class="n" id="sWalk">&mdash;</div><div class="l">Median walk</div></div>
+      <div class="stat"><div class="n" id="sMargin">&mdash;</div><div class="l">Median margin</div></div>
+    </div>
+  </header>
+
+  <div class="grid">
+
+    <!-- ============ FILTERS + RANKING MODEL ============ -->
+    <div class="leftcol">
+    <aside class="panel" id="panelFilters">
+      <div class="hd"><h2>Filters</h2><button class="linkbtn" id="reset">Reset</button></div>
+      <div class="bd">
+
+        <div class="fgroup">
+          <span class="flabel">
+            Lease remaining
+            <span class="seg" id="leaseMode">
+              <button data-mode="bands" aria-pressed="true">Bands</button>
+              <button data-mode="range" aria-pressed="false">Range</button>
+            </span>
+          </span>
+          <div id="fBands"></div>
+          <div id="fRange" hidden>
+            <input type="range" id="lMin" min="0" max="130" step="1" value="0">
+            <input type="range" id="lMax" min="0" max="130" step="1" value="130">
+            <div class="rangeval"><span>0 yrs</span><span>130 yrs</span></div>
+            <div class="sublabel"><span>Showing</span><b id="lRangeVal">0 &ndash; 130 years</b></div>
+            <label class="opt" style="margin-top:4px">
+              <input type="checkbox" id="lNd"><span>Include undisclosed leases</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="fgroup">
+          <span class="flabel">Max walk to station</span>
+          <input type="range" id="fWalk" min="5" max="40" step="1" value="40">
+          <div class="rangeval"><span>5 min</span><span>Any</span></div>
+          <div class="sublabel"><span>Within</span><b id="fWalkVal">Any distance</b></div>
+        </div>
+
+        <div class="fgroup">
+          <span class="flabel">Station type</span>
+          <div class="chips" id="fModes"></div>
+        </div>
+
+        <div class="fgroup">
+          <span class="flabel">Bedrooms</span>
+          <div class="chips" id="fBeds"></div>
+        </div>
+
+        <div class="fgroup">
+          <span class="flabel">Max guide price</span>
+          <input type="range" id="fPrice" min="90000" max="300000" step="5000" value="300000">
+          <div class="rangeval"><span>&pound;90k</span><span>&pound;300k</span></div>
+          <div class="sublabel"><span>Up to</span><b id="fPriceVal">&pound;300k</b></div>
+        </div>
+
+        <div class="fgroup">
+          <span class="flabel">Auction</span>
+          <div id="fHouses"></div>
+        </div>
+
+      </div>
+    </aside>
+
+    <aside class="panel" id="panelModel">
+      <div class="hd"><h2>Ranking model</h2><button class="linkbtn" id="mReset">Reset</button></div>
+      <div class="bd">
+        <p class="mIntro">Ranks by the equity left after buying <em>and</em> extending the lease.
+          Every input is an assumption &mdash; change them and the ranking moves.</p>
+        <div id="mBody"></div>
+      </div>
+    </aside>
+    </div>
+
+    <!-- ============ MAP + LIST ============ -->
+    <main style="display:grid;gap:16px;min-width:0">
+      <section class="panel" id="panelMap">
+        <div class="hd">
+          <h2>Map</h2>
+          <span style="font-size:11.5px;color:var(--ink-3)">Click a pin for detail &middot; drag to pan &middot; scroll to zoom</span>
+        </div>
+        <div class="mapwrap">
+          <svg class="map" id="map" viewBox="0 0 1000 840" role="img" aria-label="Map of Greater London showing auction lots">
+            <g id="vp">
+              <g id="gBoro"></g>
+              <g id="gTube"></g>
+              <g id="gLab"></g>
+              <g id="gStn"></g>
+              <g id="gPins"></g>
+            </g>
+          </svg>
+          <div class="mapctl">
+            <button id="zIn"  title="Zoom in">+</button>
+            <button id="zOut" title="Zoom out">&minus;</button>
+            <button id="zFit" title="Reset view" style="font-size:12px">&#9634;</button>
+          </div>
+          <div class="layers">
+            <button id="tTube" aria-pressed="false" title="Show the Tube and DLR network">Tube lines</button>
+            <button id="tStn"  aria-pressed="false" title="Show each lot's nearest station">Nearest station</button>
+          </div>
+          <div class="legend" id="legend"></div>
+          <div class="tubekey" id="tubekey" hidden></div>
+          <a class="tip" id="tip" target="_blank" rel="noopener"></a>
+        </div>
+      </section>
+
+      <section class="panel" id="panelList">
+        <div class="hd">
+          <h2>Lots</h2>
+          <label style="font-size:12px;color:var(--ink-3)">Sort
+            <select id="sort" style="margin-left:6px;font:inherit;font-size:12px;border:1px solid var(--line);border-radius:6px;padding:3px 6px;background:#fff;color:var(--ink)">
+              <option value="margin">Implied margin, best first</option>
+              <option value="allin">All-in cost, lowest first</option>
+              <option value="lease">Lease, shortest first</option>
+              <option value="leaseD">Lease, longest first</option>
+              <option value="price">Guide, lowest first</option>
+              <option value="priceD">Guide, highest first</option>
+              <option value="walk">Walk to station, nearest first</option>
+              <option value="beds">Bedrooms, most first</option>
+              <option value="date">Auction date</option>
+            </select>
+          </label>
+        </div>
+        <div class="listwrap" id="list"></div>
+      </section>
+    </main>
+
+    <!-- ============ DETAIL ============ -->
+    <aside class="panel detailCol" id="detail">
+      <div class="grab"></div>
+      <div class="hd"><h2>Detail</h2><button class="linkbtn" id="sheetClose">Close</button></div>
+      <div id="dBody"><div class="dEmpty">Select a pin on the map or a lot from the list.</div></div>
+    </aside>
+
+  </div>
+
+
+  <p class="foot">
+    Lease lengths were read from each individual lot listing and are as published by the auctioneer &mdash; always verify against the legal pack before bidding.
+    Station distances come from the Transport for London StopPoint API and are straight-line; walk times apply a 1.25&times; street-detour factor at 80 m/min, so treat them as indicative rather than door-to-door.
+    The Tube lines overlay is drawn from an open Underground and Docklands Light Railway network dataset in Transport for London&rsquo;s own line colours. It predates the Elizabeth line and the Northern line&rsquo;s Battersea extension, so treat it as an orientation layer &mdash; each lot&rsquo;s own station detail, including Elizabeth line access, comes from the live API and is authoritative.
+    Pins are plotted to postcode centroid, so they show the street, not the exact door.
+    Guide prices are not reserves and lots frequently sell above them; buyer&rsquo;s fees and a contract documentation charge apply on top.
+    <strong>Marriage value has not been abolished</strong> &mdash; the relevant sections of the Leasehold and Freehold Reform Act 2024 are not in force, so it remains payable in full on any lease with 80 years or less remaining.
+    <strong>On the ranking.</strong> The model prices the statutory lease extension under the Leasehold Reform, Housing and Urban Development Act 1993 &mdash; capitalised ground rent, plus the loss of reversion deferred at the Cadogan v Sportelli rate for flats, plus the freeholder&rsquo;s half of marriage value below 80 years &mdash; and sets the total against what the flat is worth once held. Freehold values start from the HM Land Registry UK House Price Index average flat price for the lot&rsquo;s borough (August 2026), adjusted for condition and size; that is a borough average, not a valuation of this flat, so override it per lot where you know better. Relativity uses our own curve calibrated to figures cited in Upper Tribunal decisions, not a reproduction of any published graph; tribunals work from the Gerald Eve 2016 and Savills 2016 unenfranchiseable graphs. Ground rents are assumed because catalogues rarely publish them. The stamp duty input is a placeholder, not a calculated rate &mdash; set it from your own circumstances.
+    This is a screening tool to decide what deserves a surveyor and a solicitor. It is not a valuation, and it is not investment advice.
+  </p>
+
+</div>
+
+  <div class="sheetBack" id="sheetBack"></div>
+
+  <nav class="tabbar" id="tabbar" aria-label="Sections">
+    <button data-tab="map" aria-pressed="false">
+      <svg viewBox="0 0 24 24"><path d="M9 4 3 6.5v13L9 17l6 2.5 6-2.5v-13L15 7 9 4Z"/><path d="M9 4v13M15 7v12.5"/></svg>
+      Map</button>
+    <button data-tab="list" aria-pressed="false">
+      <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      <span class="badge" id="tabCount"></span>Lots</button>
+    <button data-tab="filters" aria-pressed="false">
+      <svg viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
+      Filters</button>
+    <button data-tab="model" aria-pressed="false">
+      <svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16"/><path d="M8 16v-4M12 16V8M16 16v-6"/></svg>
+      Model</button>
+  </nav>
+
+<script>
+/* =======================================================================
+   DATA
+   RAW: [house, lot, address, area, postcode, beds, priceNum, priceLabel,
+         leaseYears|null, lat, lon, link, note]
+   STN: lot -> [ {n:name, d:metres, m:"TON..", l:"Line/Line"} , ... ]
+        mode codes: T tube, O overground, N national rail, D DLR, E Elizabeth
+   ===================================================================== */
+const AS_AT = "7 November 2026";
+
+const HOUSES = {
+  AHL:{name:"Auction House London", date:"11–12 Nov 2026", order:1,
+       base:"https://auctionhouselondon.co.uk/lot/"},
+  BM :{name:"Barnard Marcus",       date:"17 Nov 2026",        order:2,
+       base:"https://www.barnardmarcusauctions.co.uk/auctions/17-november-2026/"},
+  SAV:{name:"Savills",              date:"24–25 Nov 2026", order:3,
+       base:"https://auctions.savills.co.uk"}
+};
+
+const RAW = [
+ ["AHL","14","6 Cranleigh Close","Penge","SE20 8TW",3,90000,"£90,000+",28,51.40869,-0.06638,"6-cranleigh-close-penge-london-se20-8tw-373529",""],
+ ["AHL","122","Flat 12 Hedley Court, Putney Hill","Putney","SW15 3NS",3,130000,"£130,000+",32,51.45184,-0.22078,"flat-12-hedley-court-putney-hill-london-sw15-3ns-374156",""],
+ ["AHL","24","37 Cowper Road","Wimbledon","SW19 1AA",2,180000,"£180,000+",44,51.42163,-0.18619,"37-cowper-road-wimbledon-london-sw19-1aa-373147",""],
+ ["AHL","67","14A Glebe Road","Finchley","N3 2AX",2,185000,"£185,000+",46,51.60138,-0.17520,"14a-glebe-road-finchley-london-n3-2ax-373880",""],
+ ["AHL","30","33 Manor Court, York Way","Whetstone","N20 0DR",2,120000,"£120,000+",47,51.62394,-0.15834,"33-manor-court-york-way-whetstone-london-n20-0dr-374123",""],
+ ["AHL","152","24 Pitfield Crescent","Thamesmead","SE28 8RG",2,150000,"£150,000+",61,51.50109,0.10627,"24-pitfield-crescent-thamesmead-london-se28-8rg-368457",""],
+ ["AHL","84","325B Dersingham Avenue","Manor Park","E12 6JX",2,175000,"£175,000+",78,51.54663,0.06313,"325b-dersingham-avenue-manor-park-london-e12-6jx-373079",""],
+ ["AHL","90A","Flat 64 Rivers Apartments, Cannon Road","Tottenham","N17 8FE",2,245000,"£245,000+",87,51.60843,-0.06999,"flat-64-rivers-apartments-cannon-road-tottenham-london-n17-8fe-366180",""],
+ ["AHL","97","72 Ibsley Gardens","Wandsworth","SW15 4JW",4,290000,"£290,000+",94,51.44653,-0.24261,"72-ibsley-gardens-wandsworth-london-sw15-4jw-372530",""],
+ ["AHL","98","24 Timsbury Walk","Wandsworth","SW15 4LN",3,290000,"£290,000+",100,51.44633,-0.23990,"24-timsbury-walk-wandsworth-london-sw15-4ln-372529",""],
+ ["AHL","7A","Flat 11 Winchester Court, 242 Billet Road","Walthamstow","E17 5HE",2,130000,"£130,000+",98,51.59972,-0.03197,"flat-11-winchester-court-242-billet-road-walthamstow-london-e17-5he-375146",""],
+ ["AHL","128","Flat 15 Cobden Court, Byron Close","Greenwich","SE28 8AG",2,130000,"£130,000–£150,000",101,51.50158,0.11942,"flat-15-cobden-court-byron-close-greenwich-london-se28-8ag-373248",""],
+ ["AHL","107","Apartment 9 Block D, 32 Hornsey Road","Islington","N7 7AT",2,240000,"£240,000+",102,51.55342,-0.11101,"apartment-9-block-d-32-hornsey-road-islington-london-n7-7at-370410",""],
+ ["AHL","25A","Flat 16 Westchester Court, Westchester Drive","Hendon","NW4 1RB",2,275000,"£275,000+",129,51.59399,-0.21514,"flat-16-westchester-court-westchester-drive-hendon-london-nw4-1rb-368645","Catalogue lists this as two/three bedrooms."],
+ ["BM","186","12 Henley Lodge, Tennison Road","South Norwood","SE25 5RP",2,135000,"£135,000",33,51.39621,-0.08168,"732143",""],
+ ["BM","185","48A Ashford Road","Cricklewood","NW2 6TT",2,230000,"£230,000",55,51.55704,-0.21832,"732099",""],
+ ["BM","172","Flat B, 22 Longton Avenue","Sydenham","SE26 6QZ",2,170000,"£170,000",81,51.42801,-0.06782,"732476",""],
+ ["BM","183","72 Boundfield Road","Catford","SE6 1PF",2,210000,"£210,000",88,51.43514,0.00426,"731262",""],
+ ["BM","027","Flat B, 69 Wrottesley Road","Woolwich","SE18 3EW",2,195000,"£195,000",null,51.48011,0.07290,"733187","Leasehold, but the term is not published on the lot page — it is in the legal pack only."],
+ ["BM","028","Basement / Ground Floor Flat, 157 Ham Park Road","Forest Gate","E7 9LE",2,275000,"£275,000",null,51.54172,0.01861,"734244","Leasehold, but the term is not published on the lot page — it is in the legal pack only."],
+ ["BM","042","Flat B, 1 Tuscan Road","Plumstead","SE18 1SY",2,195000,"£195,000",null,51.48358,0.08543,"732200","Leasehold, but the term is not published on the lot page — it is in the legal pack only."],
+ ["BM","178","Flat 31 Pallant House, Tabard Street","Borough","SE1 4YD",2,255000,"£255,000",null,51.49635,-0.08790,"733482","Leasehold, but the term is not published on the lot page — it is in the legal pack only."],
+ ["SAV","613","68 Brookdale Road","Catford","SE6 4JR",2,100000,"£100,000",28,51.44739,-0.02072,"/auctions/24--25-november-2026-246/68-brookdale-road-catford-london-se6-4jr-26100","99-year lease from 29 September 1955. Appears to be tenanted rather than vacant — check the tenancy before modelling."],
+ ["SAV","607","48 Harton Road","Edmonton","N9 0SG",2,130000,"£130,000",58,51.62581,-0.05283,"/auctions/24--25-november-2026-246/48-harton-road-edmonton-london-n9-0sg-26087","99-year lease from 25 December 1985."],
+ ["SAV","532","13 Birkbeck Avenue","Acton","W3 6HX",2,230000,"£230,000",61,51.51437,-0.26753,"/auctions/24--25-november-2026-246/13-birkbeck-avenue-acton-london-w3-6hx-26268","99-year lease from 25 March 1988."],
+ ["SAV","523","59 Croydon House, Gloucester Road","Tottenham","N17 6LL",3,140000,"£140,000",104,51.59346,-0.08358,"/auctions/24--25-november-2026-246/59-croydon-house-gloucester-road-tottenham-london-n17-6ll-25814","125-year lease from 28 March 2005. Split-level."]
+];
+
+/* Nearest stations. Where one physical station serves several modes the
+   TfL API returns it once per mode, so those are merged into one entry. */
+const STN = {
+ "14" :[{n:"Anerley",d:462,m:"NO",l:"Southern, Windrush"},{n:"Birkbeck",d:846,m:"N",l:"Southern"}],
+ "122":[{n:"East Putney",d:1106,m:"T",l:"District"},{n:"Southfields",d:1140,m:"T",l:"District"}],
+ "24" :[{n:"Haydons Road",d:532,m:"N",l:"Thameslink"},{n:"Colliers Wood",d:634,m:"T",l:"Northern"}],
+ "67" :[{n:"Finchley Central",d:1212,m:"T",l:"Northern"},{n:"West Finchley",d:1316,m:"T",l:"Northern"}],
+ "30" :[{n:"New Southgate",d:1431,m:"N",l:"Great Northern, Thameslink"},{n:"Totteridge & Whetstone",d:1692,m:"T",l:"Northern"}],
+ "152":[{n:"Abbey Wood",d:1504,m:"EN",l:"Elizabeth line, Southeastern, Thameslink"}],
+ "84" :[{n:"East Ham",d:1133,m:"T",l:"District, Hammersmith & City"},{n:"Woodgrange Park",d:1336,m:"O",l:"Suffragette"}],
+ "90A":[{n:"White Hart Lane",d:355,m:"ON",l:"Greater Anglia, Weaver"},{n:"Silver Street",d:754,m:"ON",l:"Greater Anglia, Weaver"}],
+ "97" :[{n:"Barnes",d:2347,m:"N",l:"South Western Railway"},{n:"Putney",d:2456,m:"N",l:"South Western Railway"}],
+ "98" :[{n:"Southfields",d:2250,m:"T",l:"District"},{n:"Putney",d:2311,m:"N",l:"South Western Railway"}],
+ "7A" :[{n:"Blackhorse Road",d:1517,m:"TO",l:"Victoria, Suffragette"}],
+ "128":[{n:"Abbey Wood",d:1091,m:"EN",l:"Elizabeth line, Southeastern, Thameslink"}],
+ "107":[{n:"Holloway Road",d:159,m:"T",l:"Piccadilly"},{n:"Drayton Park",d:381,m:"N",l:"Great Northern"}],
+ "25A":[{n:"Hendon Central",d:1338,m:"T",l:"Northern"},{n:"Mill Hill East",d:1730,m:"T",l:"Northern"}],
+ "186":[{n:"Norwood Junction",d:417,m:"NO",l:"Southeastern, Southern, Thameslink, Windrush"},{n:"Selhurst",d:680,m:"N",l:"Southern"}],
+ "185":[{n:"Cricklewood",d:402,m:"N",l:"Thameslink"},{n:"Willesden Green",d:908,m:"T",l:"Jubilee, Metropolitan"}],
+ "172":[{n:"Sydenham",d:889,m:"NO",l:"Southern, Windrush"},{n:"Sydenham Hill",d:1064,m:"N",l:"Southeastern"}],
+ "183":[{n:"Grove Park",d:1313,m:"N",l:"Southeastern"},{n:"Bellingham",d:1635,m:"N",l:"Southeastern, Thameslink"}],
+ "027":[{n:"Woolwich Arsenal",d:1120,m:"ND",l:"Southeastern, Thameslink, DLR"}],
+ "028":[{n:"Maryland",d:1015,m:"E",l:"Elizabeth line"},{n:"Forest Gate",d:1036,m:"E",l:"Elizabeth line"}],
+ "042":[{n:"Plumstead",d:758,m:"N",l:"Southeastern, Thameslink"},{n:"Woolwich Arsenal",d:1338,m:"N",l:"Southeastern, Thameslink"}],
+ "178":[{n:"Borough",d:728,m:"T",l:"Northern"},{n:"Elephant & Castle",d:841,m:"N",l:"Southeastern, Thameslink"}],
+ "613":[{n:"Catford Bridge",d:417,m:"N",l:"Southeastern"},{n:"Catford",d:525,m:"N",l:"Southeastern, Thameslink"}],
+ "607":[{n:"Edmonton Green",d:630,m:"NO",l:"Greater Anglia, Weaver"},{n:"Silver Street",d:1558,m:"NO",l:"Greater Anglia, Weaver"}],
+ "532":[{n:"Acton Main Line",d:354,m:"EN",l:"Elizabeth line, Great Western Railway"},{n:"Acton Central",d:651,m:"O",l:"Mildmay"}],
+ "523":[{n:"Bruce Grove",d:914,m:"ON",l:"Greater Anglia, Weaver"},{n:"Seven Sisters",d:1295,m:"T",l:"Victoria"}]
+};
+
+const MODE = {T:{k:"T",lab:"Tube"},O:{k:"O",lab:"Overground"},N:{k:"N",lab:"Rail"},
+              D:{k:"D",lab:"DLR"},E:{k:"E",lab:"Elizabeth"}};
+
+/* Walk time: straight-line metres, 1.25x street-detour factor, 80 m/min. */
+const walkMin = m => Math.max(1, Math.round(m*1.25/80));
+
+const P = RAW.map((r,i)=>{
+  const stns = STN[r[1]] || [];
+  return {
+    i, house:r[0], lot:r[1], addr:r[2], area:r[3], pc:r[4], beds:r[5],
+    priceN:r[6], price:r[7], yrs:r[8], lat:r[9], lon:r[10],
+    url: r[0]==="SAV" ? HOUSES.SAV.base + r[11]
+       : r[0]==="BM"  ? HOUSES.BM.base  + r[11] + "/"
+       :                HOUSES.AHL.base + r[11],
+    note:r[12],
+    stns,
+    walk: stns.length ? walkMin(stns[0].d) : 99,
+    modes: [...new Set(stns.flatMap(s=>s.m.split("")))]
+  };
+});
+
+/* ---------- Lease bands ------------------------------------------------- */
+const BANDS = [
+  {id:"b1", lab:"Under 40 years",  c:"var(--b1)", lo:0,  hi:40,
+   blurb:"Cash only. Full marriage value plus a large reversion premium — the extension cost, not the hammer price, is the real number."},
+  {id:"b2", lab:"40–59 years", c:"var(--b2)", lo:40, hi:60,
+   blurb:"Below mainstream lending thresholds, so the bidding pool is thin and the discount is real. Marriage value still applies."},
+  {id:"b3", lab:"60–79 years", c:"var(--b3)", lo:60, hi:80,
+   blurb:"Approaching the 80-year cliff. Marriage value applies and the premium rises steeply as the lease runs down."},
+  {id:"b4", lab:"80–104 years",c:"var(--b4)", lo:80, hi:105,
+   blurb:"Above 80 years, so no marriage value is payable. Mortgageable, and priced close to full market value."},
+  {id:"b5", lab:"105–130 years",c:"var(--b5)",lo:105,hi:999,
+   blurb:"A long lease. No marriage value and no meaningful lease-related discount to capture."},
+  {id:"b0", lab:"Not disclosed",   c:"var(--b0)", lo:null,hi:null,
+   blurb:"The auctioneer has not published the lease term online. It is in the legal pack — confirm before bidding."}
+];
+const bandOf = p => p.yrs===null ? BANDS[5]
+                 : BANDS.find(b=>b.lo!==null && p.yrs>=b.lo && p.yrs<b.hi);
+
+/* =======================================================================
+   RANKING MODEL
+
+   A screening model, not a valuation. It prices the statutory lease
+   extension (Leasehold Reform, Housing and Urban Development Act 1993,
+   s.42: 90 years added, ground rent to a peppercorn), adds it to the
+   all-in cost of buying, and compares that with what the flat is worth
+   once held. Every assumption is yours to change, and every lot shows
+   its full workings.
+
+   Premium = term value + reversion value + the landlord's 50% share of
+   marriage value, with marriage value payable only below 80 years. That
+   remains the law: the abolition in the 2024 Act is not in force.
+   ===================================================================== */
+
+/* Average sold price of a flat or maisonette by borough.
+   HM Land Registry, UK House Price Index, August 2026. */
+const BORO_FLAT = {
+  "Kensington and Chelsea":947855,"Westminster":784694,"City of London":726060,
+  "Camden":656955,"Hammersmith and Fulham":579711,"Islington":542886,
+  "Hackney":535923,"Wandsworth":532028,"Richmond upon Thames":492607,
+  "Haringey":467608,"Southwark":466671,"Lambeth":441815,"Tower Hamlets":429851,
+  "Ealing":410282,"Merton":409754,"Waltham Forest":390968,"Brent":383498,
+  "Lewisham":374267,"Kingston upon Thames":368099,"Barnet":364239,
+  "Hounslow":353291,"Greenwich":350603,"Newham":320546,"Harrow":319799,
+  "Bromley":306823,"Redbridge":301680,"Enfield":300325,"Hillingdon":291852,
+  "Sutton":287646,"Croydon":257891,"Havering":249212,"Barking and Dagenham":245845,
+  "Bexley":245833
+};
+
+/* Borough average across all property types, same source and month. Used
+   only as the denominator for the district adjustment below. */
+const BORO_ALL = {
+  "Kensington and Chelsea":1204072,"Westminster":887206,"Richmond upon Thames":813931,
+  "Camden":798486,"Hammersmith and Fulham":754825,"City of London":726633,
+  "Wandsworth":694210,"Islington":654286,"Haringey":633221,"Merton":623791,
+  "Hackney":619408,"Kingston upon Thames":597587,"Barnet":592892,"Ealing":589875,
+  "Southwark":569160,"Brent":555687,"Lambeth":540198,"Waltham Forest":532212,
+  "Harrow":532173,"Hounslow":528051,"Bromley":520253,"Lewisham":486416,
+  "Redbridge":484378,"Hillingdon":482137,"Enfield":474855,"Greenwich":462868,
+  "Sutton":458954,"Tower Hamlets":447950,"Havering":444572,"Bexley":414833,
+  "Croydon":396718,"Newham":388045,"Barking and Dagenham":369881
+};
+
+/* Median sold price by postcode district, last 12 months (movegrid, from
+   Land Registry sales). A borough average hides enormous variation — N17 is
+   not Crouch End, SE28 is not Blackheath — so each lot is adjusted by how
+   its district compares with its borough. */
+const DIST_MEDIAN = {
+  "SE20":425000,"SW15":610000,"SW19":597500,"N3":645000,"N20":755000,
+  "SE28":356000,"E12":480000,"N17":454500,"E17":565450,"N7":565000,
+  "NW4":545000,"SE25":401500,"NW2":544000,"SE26":465000,"SE6":450000,
+  "SE18":420000,"E7":550000,"SE1":568750,"N9":410000,"W3":495000
+};
+
+const LOT_DIST = {
+  "14":"SE20","122":"SW15","24":"SW19","67":"N3","30":"N20","152":"SE28",
+  "84":"E12","90A":"N17","97":"SW15","98":"SW15","7A":"E17","128":"SE28",
+  "107":"N7","25A":"NW4","186":"SE25","185":"NW2","172":"SE26","183":"SE6",
+  "027":"SE18","028":"E7","042":"SE18","178":"SE1","613":"SE6","607":"N9",
+  "532":"W3","523":"N17"
+};
+
+/* District medians are all-property-type, so a district full of terraced
+   houses inside a flat-heavy borough reads artificially rich. The ratio is
+   therefore capped: a district can be much cheaper than its borough, but a
+   ratio far above 1 is usually a housing-mix artefact rather than a real
+   difference in flat values. Validated against published district flat
+   medians: N17 and E17 both land within 2%. */
+function districtRatio(p){
+  const d=LOT_DIST[p.lot], b=LOT_BORO[p.lot];
+  if(!d || !b || !DIST_MEDIAN[d] || !BORO_ALL[b]) return 1;
+  return Math.max(0.65, Math.min(1.15, DIST_MEDIAN[d]/BORO_ALL[b]));
+}
+
+/* Billing borough for each lot, from its postcode (postcodes.io). */
+const LOT_BORO = {
+  "14":"Bromley","122":"Wandsworth","24":"Merton","67":"Barnet","30":"Barnet",
+  "152":"Greenwich","84":"Newham","90A":"Haringey","97":"Wandsworth",
+  "98":"Wandsworth","7A":"Waltham Forest","128":"Greenwich","107":"Islington",
+  "25A":"Barnet","186":"Croydon","185":"Brent","172":"Lewisham","183":"Lewisham",
+  "027":"Greenwich","028":"Newham","042":"Greenwich","178":"Southwark",
+  "613":"Lewisham","607":"Enfield","532":"Ealing","523":"Haringey"
+};
+
+/* Relativity — the existing short lease as a percentage of freehold vacant
+   possession value. This is our own smooth curve, not a reproduction of any
+   published graph. It is calibrated to sit close to figures cited in Upper
+   Tribunal decisions (about 66% at 43 years, about 82% at 66 years, about
+   94% at 88 years). Tribunals themselves work from the Gerald Eve 2016 and
+   Savills 2016 unenfranchiseable graphs; a surveyor's relativity opinion on
+   the actual building beats any graph, so there is an adjustment slider. */
+const REL_ANCHORS=[[0,0],[10,24],[20,37],[30,51],[40,63],[50,73],[60,79],
+                   [70,85],[80,91],[90,95],[100,97],[110,98],[130,99.5]];
+function relativity(n){
+  if(n<=0) return 0;
+  const A=REL_ANCHORS;
+  if(n>=A[A.length-1][0]) return A[A.length-1][1];
+  for(let i=1;i<A.length;i++){
+    if(n<=A[i][0]){
+      const [x0,y0]=A[i-1], [x1,y1]=A[i];
+      return y0+(y1-y0)*(n-x0)/(x1-x0);
+    }
+  }
+  return 99.5;
+}
+
+/* Larger flats carry a premium over the borough average, which mixes all
+   sizes. Applied on top of the condition factor below. */
+const BED_FACTOR = {2:1.00, 3:1.18, 4:1.35};
+
+/* Default assumptions. Every one of these is exposed in the interface. */
+const MODEL_DEFAULTS = {
+  hammer:15,      // % over guide the lot actually sells for
+  quality:78,     // lot value as % of borough average flat (auction stock is
+                  // typically ex-local-authority or needs modernising)
+  relAdj:0,       // percentage points added to the relativity curve
+  gr:150,         // assumed ground rent, £/yr
+  cap:6.5,        // ground rent capitalisation rate, %
+  def:5.0,        // deferment rate, % — 5% for flats per Cadogan v Sportelli
+  costs:8,        // stamp duty + legal + survey, % of price. SET THIS YOURSELF
+  extCosts:5000,  // lease extension: valuation, and both sides' legal, £
+  auctionFee:1800 // buyer's fee / contract documentation charge, £
+};
+
+function fhvpOf(p, M){
+  if(p.fhvpOverride) return p.fhvpOverride;
+  const base = BORO_FLAT[LOT_BORO[p.lot]];
+  if(!base) return null;
+  return base * districtRatio(p) * (M.quality/100) * (BED_FACTOR[Math.min(p.beds,4)]||1);
+}
+
+/* Returns null where the lease term is undisclosed — those lots cannot be
+   ranked, and are shown separately rather than guessed at. */
+function model(p, M){
+  if(p.yrs===null) return null;
+  const fhvp = fhvpOf(p, M);
+  if(!fhvp) return null;
+
+  const n=p.yrs, def=M.def/100, cap=M.cap/100;
+  const rel = Math.min(100, Math.max(0, relativity(n)+M.relAdj))/100;
+
+  // landlord's existing interest
+  const yp   = cap>0 ? (1-Math.pow(1+cap,-n))/cap : n;   // years' purchase
+  const term = M.gr*yp;                                   // ground rent income
+  const revNow   = fhvp/Math.pow(1+def,n);                // reversion today
+  const revAfter = fhvp/Math.pow(1+def,n+90);             // reversion if extended
+  const reversion = revNow-revAfter;
+
+  // marriage value — payable only below 80 years, split 50/50
+  let mv=0;
+  if(n<80){
+    const after  = fhvp + revAfter;
+    const before = rel*fhvp + term + revNow;
+    mv = Math.max(0, after-before)*0.5;
+  }
+  const premium = term + reversion + mv;
+
+  // buying costs
+  const hammer = p.priceN*(1+M.hammer/100);
+  const buyCost = hammer + M.auctionFee + hammer*(M.costs/100);
+
+  // extend only where extending is worth more than it costs
+  const gainFromExtending = fhvp - rel*fhvp;
+  const costOfExtending   = premium + M.extCosts;
+  const extend = gainFromExtending > costOfExtending;
+
+  const endValue = extend ? fhvp : rel*fhvp;
+  const allIn    = buyCost + (extend ? costOfExtending : 0);
+  const equity   = endValue - allIn;
+
+  return {fhvp, rel, yp, term, reversion, mv, premium, hammer, buyCost,
+          extend, endValue, allIn, equity, margin: allIn>0 ? equity/allIn*100 : 0};
+}
+
+/* =======================================================================
+   MAP GEOMETRY  (borough outlines projected into a 1000 x 840 space)
+   ===================================================================== */
+const LAT=[51.26,51.72], LON=[-0.54,0.34], MW=1000;
+const MH = MW*(LAT[1]-LAT[0])/((LON[1]-LON[0])*Math.cos(51.5*Math.PI/180));
+const proj = (lon,lat)=>[ (lon-LON[0])/(LON[1]-LON[0])*MW,
+                          MH-(lat-LAT[0])/(LAT[1]-LAT[0])*MH ];
+
+const BORO_NAMES=["Barking and Dagenham","Barnet","Bexley","Brent","Bromley","Camden","City of London","Croydon","Ealing","Enfield","Greenwich","Hackney","Hammersmith and Fulham","Haringey","Harrow","Havering","Hillingdon","Hounslow","Islington","Kensington and Chelsea","Kingston upon Thames","Lambeth","Lewisham","Merton","Newham","Redbridge","Richmond upon Thames","Southwark","Sutton","Tower Hamlets","Waltham Forest","Wandsworth","Westminster"];
+
+const BORO_D=("M828 303L824 282L798 289L780 276L780 220L757 243L765 256L751 295L720 318L719 311L691 320L691 336L696 348L719 355L727 380L760 373L793 386L828 303Z|M290 151L267 158L332 248L327 271L348 270L371 301L416 275L435 244L436 210L442 224L449 219L449 191L467 160L441 136L438 118L387 91L356 115L329 117L321 143L315 137L290 151Z|M766 374L748 377L755 444L725 446L707 463L713 505L699 525L736 558L787 568L791 528L800 532L810 505L845 485L854 447L868 434L824 428L807 391L766 374Z|M312 221L284 231L293 246L267 243L242 258L248 274L232 298L264 318L270 343L293 331L297 341L285 344L295 350L321 337L368 351L383 341L390 351L396 335L357 281L346 269L327 271L332 248L312 221Z|M610 681L631 782L651 753L662 780L711 780L710 737L748 713L748 686L769 686L776 674L788 624L782 597L798 598L790 577L764 558L736 558L699 526L680 539L648 503L642 516L657 523L655 543L642 531L602 559L579 537L529 537L522 556L572 605L572 626L583 622L587 647L610 681Z|"+
+"M452 275L421 269L387 299L371 301L399 339L411 329L440 333L469 378L494 367L474 345L452 275Z|M517 365L504 359L484 368L487 384L523 389L530 377L525 362L517 365Z|M614 714L608 672L587 647L583 622L572 626L572 605L553 593L553 581L536 578L524 548L486 542L464 567L473 589L461 601L481 683L468 680L446 696L448 724L430 731L437 764L458 765L480 790L510 764L524 731L555 726L557 707L571 696L614 714Z|M183 303L161 314L164 324L137 328L186 349L151 402L184 408L191 419L215 403L259 416L295 396L307 412L323 411L324 394L335 389L326 357L333 341L291 349L293 331L264 341L258 312L219 293L183 303Z|M600 71L495 51L428 58L402 104L438 118L441 136L467 160L449 191L456 200L567 209L599 147L600 71Z|M699 525L713 505L707 463L725 446L755 444L748 377L717 382L689 407L642 409L613 390L611 424L585 429L595 438L592 456L635 449L624 466L638 506L659 509L684 541L699 525Z|M505 267L495 283L527 315L503 341L517 364L543 337L563 336L576 320L595 323L593 301L560 287L544 260L505 267Z|"+
+"M354 346L334 342L326 357L334 393L324 394L337 424L355 427L367 459L398 467L412 443L370 400L354 346Z|M505 202L460 199L442 224L436 209L435 244L419 269L452 275L478 264L494 284L502 267L544 260L567 209L505 202Z|M268 153L254 145L229 165L154 195L187 305L219 293L232 298L248 274L242 258L267 243L293 246L284 231L310 218L268 153Z|M795 375L822 427L853 427L857 409L875 403L871 390L889 387L883 366L892 367L897 349L902 369L913 369L915 343L993 328L969 281L944 284L920 220L902 216L914 203L868 161L806 180L771 176L785 227L780 276L798 289L824 282L830 305L795 375Z|M185 357L186 349L137 331L164 324L161 314L184 302L154 195L113 182L94 197L49 161L46 233L72 296L51 331L65 389L34 461L104 486L119 480L146 457L140 434L148 402L185 357Z|M184 408L149 401L140 434L146 457L109 487L92 481L95 515L106 511L114 528L137 525L152 543L176 546L173 532L197 508L173 494L190 479L242 480L252 455L282 425L321 454L337 424L326 399L323 411L309 413L295 396L280 399L259 416L215 403L191 419L184 408Z|"+
+"M495 283L478 264L452 276L474 345L494 368L504 359L516 367L517 354L503 341L527 314L495 283Z|M368 350L354 346L354 363L405 443L443 430L434 397L410 406L385 360L368 350Z|M272 682L294 644L342 610L325 516L288 547L283 531L256 533L266 545L253 596L264 624L238 678L241 718L266 702L272 682Z|M513 528L498 489L511 463L491 438L497 417L486 384L461 450L443 461L460 529L445 561L468 562L486 542L524 548L513 528Z|M614 552L642 531L658 539L625 476L635 449L598 452L597 460L580 413L568 414L552 424L566 484L543 497L530 536L579 537L597 559L614 552Z|M454 549L407 539L398 508L351 514L325 530L332 588L366 620L375 606L400 611L415 596L431 606L466 597L469 562L445 561L454 549Z|M691 320L688 300L671 285L661 289L666 301L592 307L590 334L634 405L689 407L727 380L719 355L696 348L691 320Z|M720 318L761 280L757 243L784 214L776 185L768 176L749 191L719 194L715 210L696 210L638 166L624 184L638 197L627 231L630 293L666 301L661 289L671 285L688 300L691 320L720 318Z|"+
+"M185 507L197 508L173 532L176 546L167 542L171 565L206 562L250 598L263 580L258 529L283 531L288 547L338 508L320 474L326 465L349 467L350 451L360 455L355 428L339 422L316 455L280 425L242 480L188 481L173 494L185 507Z|M522 389L490 384L487 408L497 417L491 438L511 463L499 492L525 547L543 497L566 484L552 424L580 413L580 396L570 386L546 399L522 389Z|M365 682L352 700L363 712L389 687L428 711L436 727L448 724L449 690L481 683L463 602L426 606L415 596L400 611L375 606L366 620L341 604L335 645L356 652L365 682Z|M614 390L625 386L604 365L590 334L595 323L576 320L526 352L531 383L523 389L545 399L577 389L592 429L612 423L614 390Z|M639 165L639 144L600 135L543 256L560 287L582 290L604 310L638 301L627 233L638 197L624 184L639 165Z|M455 548L459 507L450 508L442 464L461 450L466 427L417 436L398 467L351 451L349 467L323 469L319 484L339 505L325 516L328 525L398 508L407 539L455 548Z|M487 374L467 377L440 333L409 329L390 351L383 341L369 344L410 406L434 397L443 430L469 425L487 374Z|"
+).split("|").filter(Boolean);
+
+const BORO_C={"Barking and Dagenham":[760,303],"Barnet":[385,185],"Bexley":[776,483],"Brent":[308,301],"Bromley":[661,621],"Camden":[441,330],"City of London":[509,372],"Croydon":[510,679],"Ealing":[238,361],"Enfield":[492,125],"Greenwich":[661,462],"Hackney":[541,315],"Hammersmith and Fulham":[357,396],"Haringey":[470,242],"Harrow":[222,224],"Havering":[865,302],"Hillingdon":[100,322],"Hounslow":[206,466],"Islington":[496,325],"Kensington and Chelsea":[391,391],"Kingston upon Thames":[284,604],"Lambeth":[483,484],"Lewisham":[596,495],"Merton":[401,568],"Newham":[657,340],"Redbridge":[704,248],"Richmond upon Thames":[252,503],"Southwark":[530,448],"Sutton":[417,658],"Tower Hamlets":[577,371],"Waltham Forest":[611,234],"Wandsworth":[408,496],"Westminster":[431,371]};
+
+/* Tube & DLR network, projected into the same 1000 x 840 space.
+   Source: the open tubemaps station/connection dataset, with Transport for
+   London's own line colours. Covers the Underground plus the DLR; it predates
+   the Elizabeth line, so that is shown through the station data rather than
+   as a drawn route. */
+const TUBE = [{"n":"Bakerloo","c":"#AE6017","d":"M499.9 412.0L486.9 403.2L483.7 395.0L474.7 388.1L471.9 387.0L461.1 383.7L452.8 374.2L447.0 358.9L435.1 360.3L428.3 360.5L422.8 365.3L414.2 373.5L405.1 358.7L403.0 346.8L393.3 337.5L381.0 339.3L358.0 346.1L332.0 342.1L321.0 335.5L300.1 321.5L276.9 306.9L268.9 288.2L263.5 273.6L254.3 252.6L232.8 232.7"},{"n":"Central","c":"#F15B2E","d":"M652.4 206.3L667.2 170.5L677.0 143.8L708.9 136.0L731.0 88.2L743.1 48.0M652.4 206.3L663.5 187.8L699.4 186.7L718.5 195.0L719.7 213.6L717.3 226.4L714.4 245.3L715.8 263.6L689.0 262.0L665.2 262.3L646.4 260.1L623.1 276.9M652.4 206.3L644.9 234.2L638.2 254.1L623.1 276.9L607.6 298.3L608.9 325.7L575.9 356.1L551.2 352.3L520.1 369.1L513.0 377.3L503.1 374.9L487.4 367.8L477.3 369.8L464.8 371.5L452.8 374.2L443.9 375.7L433.4 376.8L414.1 379.9L400.3 382.1L390.1 384.4L379.5 387.9L365.1 393.2L359.2 379.7L332.5 370.9L318.5 358.3M270.8 373.9L294.4 368.7L318.5 358.3L280.3 346.5L246.4 334.8L220.9 324.4L194.7 313.4L160.5 297.7L147.4 291.0L116.4 274.5"},{"n":"Circle","c":"#FFE02B","d":"M527.8 375.5L520.1 369.1L513.0 367.6L502.4 364.4L494.0 364.5L473.0 345.4L459.2 354.1L450.1 358.2L435.1 360.3L420.5 364.5L414.2 373.5L400.1 379.5L390.1 384.4L394.9 400.0L405.8 411.6L416.1 412.4L435.8 415.5L449.2 408.0L461.9 402.7L471.1 399.8L474.7 388.1L484.0 381.3L496.5 379.7L506.8 379.3L510.9 381.0L515.6 381.9L526.6 383.7L527.8 375.5"},{"n":"District","c":"#00A166","d":"M324.2 410.5L309.3 411.5L295.3 396.5L286.1 383.2L270.8 373.9M324.2 410.5L300.7 417.1L289.8 443.6L271.2 468.6M324.2 410.5L334.2 410.7L345.6 412.2L357.8 413.3L370.6 418.9L379.0 418.6L389.4 416.2M389.4 416.2L405.8 411.6L416.1 412.4L435.8 415.5L449.2 408.0L461.9 402.7L471.1 399.8L474.7 388.1L484.0 381.3L496.5 379.7L506.8 379.3L510.9 381.0L515.6 381.9L526.6 383.7L531.1 373.5L544.1 366.2L560.2 361.3L575.9 356.1L585.6 352.5L600.1 356.3L620.0 349.2L633.2 344.5L652.6 337.3L672.5 329.7L705.7 329.3L728.9 331.3L758.0 328.0L780.6 325.5L801.7 320.7L838.3 311.1L861.8 303.2L879.9 295.4L898.9 293.9M389.4 416.2L394.9 400.0L390.1 384.4L400.1 379.5L414.2 373.5L420.5 364.5M389.4 416.2L374.3 404.7M389.4 416.2L391.7 425.0L392.0 437.4L385.1 446.7L376.3 459.6L373.6 477.2L378.9 501.3L387.3 521.5L379.1 545.1"},{"n":"Docklands Light Railway","c":"#00A77E","d":"M594.0 387.5L598.9 382.1L594.0 360.9L590.0 351.8L597.8 339.0L608.9 325.7M594.0 387.5L606.1 387.2L611.2 384.6L623.0 374.8L634.2 385.0L645.0 384.3L651.8 384.6L666.5 386.3L676.1 385.7L686.4 386.1L695.0 384.1L683.3 374.6M594.0 387.5L583.5 383.9M594.0 387.5L590.6 388.8M513.0 377.3L550.0 380.2M550.0 380.2L568.6 379.1L583.5 383.9L590.6 388.8L589.9 392.3L589.2 395.6L591.9 400.3L597.3 409.4L597.2 419.5L602.2 425.1L602.7 433.2L596.7 441.6L589.1 449.1L593.9 457.6L597.5 464.2M550.0 380.2L529.2 382.2"},{"n":"East London","c":"#FBAE34","d":"M559.3 413.8L556.6 404.9L554.0 399.8L550.2 393.7L550.0 380.2L544.1 366.2L533.2 360.2M559.3 413.8L576.5 444.1M559.3 413.8L568.0 446.0"},{"n":"Hammersmith & City","c":"#F491A8","d":"M705.7 329.3L672.5 329.7L652.6 337.3L633.2 344.5L620.0 349.2L600.1 356.3L585.6 352.5L575.9 356.1L560.2 361.3L544.1 366.2L531.1 373.5L520.1 369.1L513.0 367.6L502.4 364.4L494.0 364.5L473.0 345.4L459.2 354.1L450.1 358.2L435.1 360.3L420.5 364.5L414.2 373.5L400.0 366.9L385.1 363.3L374.2 370.2L366.8 376.2L356.2 391.0L356.0 398.3L357.8 413.3"},{"n":"Jubilee","c":"#949699","d":"M269.5 183.6L278.8 204.8L288.5 229.6L297.0 247.2L296.0 285.7L329.2 302.7L342.4 306.7L361.9 311.8L381.0 315.6L397.0 316.0L408.7 315.4L416.1 322.7L415.9 338.3L435.1 360.3L443.9 375.7L451.4 389.4L471.1 399.8L483.7 395.0L494.1 399.8L515.5 392.1L541.2 405.4L556.6 404.9L589.9 392.3L618.1 400.7L623.0 374.8L620.0 349.2L608.9 325.7"},{"n":"Metropolitan","c":"#91005A","d":"M527.8 375.5L520.1 369.1L513.0 367.6L502.4 364.4L494.0 364.5L473.0 345.4L459.2 354.1L450.1 358.2L435.1 360.3L408.7 315.4L296.0 285.7L278.0 270.2L251.8 258.5L231.1 256.8M-76.1 84.7L-23.9 95.1M-23.9 95.1L-80.7 27.0M-23.9 95.1L24.7 119.9L75.8 145.3L122.7 165.4M122.7 165.4L112.3 133.3L139.0 114.5M122.7 165.4L131.8 198.8L148.6 218.3L181.3 232.6L201.6 247.2L231.1 256.8L212.2 256.5L191.6 264.1L162.5 262.0L144.9 268.0L134.9 271.1L111.3 288.6L102.4 303.4L69.8 317.1"},{"n":"Northern","c":"#000000","d":"M301.1 194.0L313.5 213.9L329.3 227.3L356.9 250.3L370.9 261.8L393.1 269.4L411.4 297.9L427.0 309.6L438.9 321.1L451.6 330.0M451.6 330.0L461.7 350.1M451.6 330.0L454.3 309.0L457.5 298.1L459.9 282.4L448.0 259.8L426.1 242.1L394.1 216.9M451.6 330.0L456.0 339.2L461.7 350.1M461.7 350.1L473.0 345.4L493.4 342.8L514.4 353.6L513.0 367.6L513.0 377.3L515.5 392.1L506.5 399.6L499.9 412.0L494.0 422.8M461.7 350.1L456.4 356.5L460.6 364.2L464.8 371.5L468.1 381.0L471.9 387.0L474.7 388.1L483.7 395.0L494.0 422.8L485.2 434.6L473.9 452.2L466.0 465.7L456.4 471.3L445.5 487.9L440.3 505.5L432.0 518.2L422.7 533.9L411.6 551.3L395.6 556.0L392.3 580.1M394.1 216.9L374.7 204.1M394.1 216.9L399.7 201.7L402.7 186.4L410.1 163.9L392.8 127.2"},{"n":"Piccadilly","c":"#094FA3","d":"M295.3 396.5L286.1 383.2L285.6 369.7L290.8 352.3L273.1 327.3L255.0 309.0L231.1 297.7L213.5 283.7L191.6 264.1L162.5 262.0L144.9 268.0L134.9 271.1L111.3 288.6L102.4 303.4L69.8 317.1M295.3 396.5L264.5 399.6L256.6 402.5L244.3 409.6L213.4 435.7L208.6 450.3L197.2 454.0L175.6 450.2L133.3 462.0M295.3 396.5L324.2 410.5L357.8 413.3L370.6 418.9L389.4 416.2L405.8 411.6L416.1 412.4L431.0 398.9L440.1 396.7L451.4 389.4L461.1 383.7L468.1 381.0L472.4 378.0L477.3 369.8L472.3 359.6L473.0 345.4L478.6 313.8L485.0 305.6L493.3 294.6L492.6 284.4L504.8 271.6L496.8 236.6L489.0 223.6L472.4 206.1L462.4 189.1L468.2 160.3L463.9 132.2L443.6 124.7M133.3 462.0L99.5 454.0L105.0 475.0L133.3 462.0"},{"n":"Victoria","c":"#0A9CDA","d":"M591.5 250.1L566.2 243.3L546.1 240.6L528.5 251.5L492.6 284.4L495.5 317.6L473.0 345.4L461.7 350.1L456.4 356.5L452.8 374.2L451.4 389.4L449.2 408.0L462.0 421.1L471.2 427.0L473.9 452.2L483.5 469.7"},{"n":"Waterloo & City","c":"#88D0C4","d":"M513.0 377.3L483.7 395.0"}];
+
+/* Project lots, keep the true position for the station leader line, then
+   nudge overlapping pins apart so every lot stays clickable. */
+P.forEach(p=>{ const [x,y]=proj(p.lon,p.lat); p.x=x; p.y=y; p.x0=x; p.y0=y; });
+(function spread(){
+  const MIN=13;
+  for(let pass=0;pass<60;pass++){
+    let moved=false;
+    for(let a=0;a<P.length;a++)for(let b=a+1;b<P.length;b++){
+      const dx=P[b].x-P[a].x, dy=P[b].y-P[a].y;
+      let d=Math.hypot(dx,dy);
+      if(d<MIN){
+        if(d===0){P[b].x+=0.1;d=0.1}
+        const push=(MIN-d)/2, ux=dx/d, uy=dy/d;
+        P[a].x-=ux*push; P[a].y-=uy*push; P[b].x+=ux*push; P[b].y+=uy*push;
+        moved=true;
+      }
+    }
+    if(!moved)break;
+  }
+})();
+
+/* =======================================================================
+   STATE
+   ===================================================================== */
+const DEFAULTS = {
+  leaseMode:"bands",
+  bands:BANDS.map(b=>b.id),
+  lMin:0, lMax:130, lNd:false,
+  walk:40, modes:[],
+  beds:[2,3,4], maxPrice:300000,
+  houses:["AHL","BM","SAV"], sort:"lease", showStn:false, showTube:false,
+  tab:"map"
+};
+/* DEFAULTS is plain JSON data, so this clone is exact and works everywhere. */
+const clone = o => JSON.parse(JSON.stringify(o));
+let S = Object.assign(clone(DEFAULTS), load("lam.filters.v2")||{});
+let M = Object.assign(clone(MODEL_DEFAULTS), load("lam.model.v1")||{});
+let sel = null;
+
+/* per-lot freehold value overrides, keyed by lot number */
+const ov = load("lam.fhvp.v1")||{};
+P.forEach(p=>{ if(ov[p.lot]) p.fhvpOverride = ov[p.lot]; });
+
+function load(k){ try{const r=localStorage.getItem(k); return r?JSON.parse(r):null}catch(e){return null} }
+function save(){
+  try{
+    localStorage.setItem("lam.filters.v2",JSON.stringify(S));
+    localStorage.setItem("lam.model.v1",JSON.stringify(M));
+    const o={}; P.forEach(p=>{ if(p.fhvpOverride) o[p.lot]=p.fhvpOverride; });
+    localStorage.setItem("lam.fhvp.v1",JSON.stringify(o));
+  }catch(e){}
+}
+
+const money = n => "£"+(n/1000).toFixed(0)+"k";
+
+/* Lease test honours whichever mode the toggle is in. */
+function leaseOK(p){
+  if(S.leaseMode==="bands") return S.bands.includes(bandOf(p).id);
+  if(p.yrs===null) return S.lNd;
+  return p.yrs>=S.lMin && p.yrs<=S.lMax;
+}
+const visible = () => P.filter(p =>
+    leaseOK(p) &&
+    S.beds.includes(Math.min(p.beds,4)) &&
+    p.priceN <= S.maxPrice &&
+    S.houses.includes(p.house) &&
+    (S.walk>=40 || p.walk<=S.walk) &&
+    (S.modes.length===0 || p.modes.some(m=>S.modes.includes(m))));
+
+/* =======================================================================
+   STATIC UI
+   ===================================================================== */
+const $ = id => document.getElementById(id);
+$("asAt").textContent = AS_AT;
+
+$("fBands").innerHTML = BANDS.map(b=>
+  `<label class="opt" data-band="${b.id}">
+     <input type="checkbox" value="${b.id}">
+     <span class="sw" style="background:${b.c}"></span>
+     <span>${b.lab}</span><span class="cnt" data-cnt="${b.id}"></span>
+   </label>`).join("");
+
+$("fModes").innerHTML = Object.values(MODE).map(m=>
+  `<button class="chip" data-mode="${m.k}" aria-pressed="false">${m.lab}</button>`).join("");
+
+$("fBeds").innerHTML = [2,3,4].map(n=>
+  `<button class="chip" data-beds="${n}" aria-pressed="false">${n===4?"4+":n}</button>`).join("");
+
+$("fHouses").innerHTML = Object.entries(HOUSES).map(([k,h])=>
+  `<label class="opt" data-house="${k}">
+     <input type="checkbox" value="${k}">
+     <span><span style="font-weight:500">${h.name}</span><br>
+       <span style="font-size:11.5px;color:var(--ink-3)">${h.date}</span></span>
+     <span class="cnt" data-hcnt="${k}"></span>
+   </label>`).join("");
+
+$("legend").innerHTML = `<div class="t">Lease remaining</div>` + BANDS.map(b=>
+  `<div class="row"><span class="sw" style="background:${b.c}"></span>${b.lab}</div>`).join("");
+
+$("gBoro").innerHTML = BORO_D.map((d,i)=>
+  `<path class="boro" d="${d}" data-name="${BORO_NAMES[i]||""}"></path>`).join("");
+
+/* Ranking-model controls. Each is an assumption, shown with what it does. */
+const M_CTRL=[
+ {s:"Price and value"},
+ {k:"hammer", lab:"Sells above guide by", min:0, max:40, step:1, fmt:v=>v+"%",
+  hint:"Guides are set low to attract bidders; most lots clear above them."},
+ {k:"quality", lab:"Lot value vs borough average", min:45, max:115, step:1, fmt:v=>v+"%",
+  hint:"Auction stock is usually ex-local-authority or needs modernising. This is the single biggest lever on the ranking — move it and watch the order change."},
+ {k:"relAdj", lab:"Relativity adjustment", min:-10, max:10, step:0.5, fmt:v=>(v>0?"+":"")+v+" pp",
+  hint:"Shifts the whole short-lease value curve. Replace with your surveyor's figure."},
+ {s:"Statutory premium"},
+ {k:"gr", lab:"Ground rent", min:0, max:500, step:25, fmt:v=>"£"+v+"/yr",
+  hint:"Rarely published in catalogues — it is in the legal pack."},
+ {k:"cap", lab:"Capitalisation rate", min:4, max:10, step:0.25, fmt:v=>v+"%",
+  hint:"Applied to the ground rent. Tribunals commonly accept 6.5–7.5% where rents are modest."},
+ {k:"def", lab:"Deferment rate", min:4, max:7, step:0.25, fmt:v=>v+"%",
+  hint:"5% for flats is the Cadogan v Sportelli starting point."},
+ {s:"Costs"},
+ {k:"costs", lab:"Stamp duty, legal and survey", min:0, max:20, step:0.5, fmt:v=>v+"%",
+  hint:"Placeholder only. Set this from your own circumstances — the stamp duty position depends on whether this is an additional property, so confirm it with your conveyancer."},
+ {k:"extCosts", lab:"Lease extension costs", min:0, max:15000, step:500, fmt:v=>"£"+v.toLocaleString(),
+  hint:"Valuation plus both sides' legal fees."},
+ {k:"auctionFee", lab:"Auction buyer's fee", min:0, max:4000, step:100, fmt:v=>"£"+v.toLocaleString(),
+  hint:"Buyer's fee or contract documentation charge, on top of the hammer price."}
+];
+
+$("mBody").innerHTML = M_CTRL.map(c=> c.s
+  ? `<div class="mSect">${c.s}</div>`
+  : `<div class="mRow">
+       <label for="m_${c.k}"><span>${c.lab}</span><b data-mval="${c.k}"></b></label>
+       <input type="range" id="m_${c.k}" data-mk="${c.k}" min="${c.min}" max="${c.max}" step="${c.step}">
+       <div class="hint">${c.hint}</div>
+     </div>`).join("")
+  + `<div class="mWarn">This is a screening model, not a valuation. Freehold values are
+     borough averages rather than these specific flats, ground rents are assumed, and the
+     relativity curve is an approximation. Get a surveyor's figure before you bid.</div>`;
+
+const fmtGBP = n => "£"+Math.round(n).toLocaleString();
+const marginClass = m => m>=15 ? "mg-pos" : m>=0 ? "mg-mid" : "mg-neg";
+
+const badges = m => m.split("").map(k=>`<span class="mb mb${k}">${MODE[k].lab}</span>`).join("");
+
+/* =======================================================================
+   RENDER
+   ===================================================================== */
+function render(){
+  const vis = visible();
+  const visSet = new Set(vis.map(p=>p.i));
+
+  // --- lease mode toggle ---
+  document.querySelectorAll('#leaseMode button').forEach(b=>
+    b.setAttribute('aria-pressed', b.dataset.mode===S.leaseMode));
+  $("fBands").hidden = S.leaseMode!=="bands";
+  $("fRange").hidden = S.leaseMode!=="range";
+  $("lMin").value=S.lMin; $("lMax").value=S.lMax; $("lNd").checked=S.lNd;
+  $("lRangeVal").textContent = `${S.lMin} – ${S.lMax} years`;
+
+  // --- other controls ---
+  document.querySelectorAll('#fBands input').forEach(el=>{
+    el.checked = S.bands.includes(el.value);
+    el.closest('.opt').classList.toggle('off', !el.checked);
+  });
+  document.querySelectorAll('#fHouses input').forEach(el=>{
+    el.checked = S.houses.includes(el.value);
+    el.closest('.opt').classList.toggle('off', !el.checked);
+  });
+  document.querySelectorAll('#fBeds .chip').forEach(el=>
+    el.setAttribute('aria-pressed', S.beds.includes(+el.dataset.beds)));
+  document.querySelectorAll('#fModes .chip').forEach(el=>
+    el.setAttribute('aria-pressed', S.modes.includes(el.dataset.mode)));
+  $("fPrice").value=S.maxPrice; $("fPriceVal").textContent=money(S.maxPrice);
+  $("fWalk").value=S.walk;
+  $("fWalkVal").textContent = S.walk>=40 ? "Any distance" : S.walk+" min walk";
+  $("sort").value=S.sort;
+  $("tStn").setAttribute('aria-pressed', S.showStn);
+  $("tTube").setAttribute('aria-pressed', S.showTube);
+
+  // --- tube overlay ---
+  $("gTube").innerHTML = S.showTube ? TUBE.map(t=>
+    `<path class="tubeline" d="${t.d}" stroke="${t.c}"></path>`).join("") : "";
+  const key=$("tubekey");
+  key.hidden = !S.showTube;
+  if(S.showTube && !key.dataset.built){
+    key.innerHTML = `<div class="t">Tube &amp; DLR</div>` + TUBE.map(t=>
+      `<div class="row"><span class="sw" style="background:${t.c}"></span>${t.n}</div>`).join("");
+    key.dataset.built="1";
+  }
+
+  // --- counts ---
+  const others = p => S.beds.includes(Math.min(p.beds,4)) && p.priceN<=S.maxPrice
+    && S.houses.includes(p.house) && (S.walk>=40||p.walk<=S.walk)
+    && (S.modes.length===0||p.modes.some(m=>S.modes.includes(m)));
+  BANDS.forEach(b=>{
+    const n = P.filter(p=>bandOf(p).id===b.id && others(p)).length;
+    const el=document.querySelector(`[data-cnt="${b.id}"]`); if(el) el.textContent=n||"";
+  });
+  Object.keys(HOUSES).forEach(k=>{
+    const n = P.filter(p=>p.house===k && leaseOK(p) && S.beds.includes(Math.min(p.beds,4))
+              && p.priceN<=S.maxPrice && (S.walk>=40||p.walk<=S.walk)
+              && (S.modes.length===0||p.modes.some(m=>S.modes.includes(m)))).length;
+    const el=document.querySelector(`[data-hcnt="${k}"]`); if(el) el.textContent=n||"";
+  });
+
+  // --- ranking model: controls, then run it over every lot ---
+  M_CTRL.forEach(c=>{
+    if(c.s) return;
+    const inp=$("m_"+c.k); if(inp) inp.value=M[c.k];
+    const out=document.querySelector(`[data-mval="${c.k}"]`); if(out) out.textContent=c.fmt(M[c.k]);
+  });
+  P.forEach(p=>{ p.m = model(p, M); });
+
+  // --- stats ---
+  $("sCount").textContent = vis.length;
+  const tc=$("tabCount"); if(tc) tc.textContent = vis.length;
+  const med = a => a.length ? a.slice().sort((x,y)=>x-y)[Math.floor(a.length/2)] : null;
+  const mp = med(vis.map(p=>p.priceN));
+  $("sMedian").textContent = mp!==null ? money(mp) : "—";
+  const my = med(vis.filter(p=>p.yrs!==null).map(p=>p.yrs));
+  $("sLease").textContent = my!==null ? my+"y" : "—";
+  const mw = med(vis.map(p=>p.walk));
+  $("sWalk").textContent = mw!==null ? mw+"m" : "—";
+  const mm = med(vis.filter(p=>p.m).map(p=>p.m.margin));
+  const mgEl=$("sMargin");
+  mgEl.textContent = mm!==null ? (mm>0?"+":"")+mm.toFixed(0)+"%" : "—";
+  mgEl.className = "n " + (mm===null ? "" : marginClass(mm));
+
+  // --- station leader lines ---
+  $("gStn").innerHTML = !S.showStn ? "" : vis.map(p=>{
+    const s=p.stns[0]; if(!s) return "";
+    // place the station marker in the true compass direction, scaled by distance
+    const [sx,sy] = stationXY(p,s);
+    return `<line class="stn" x1="${p.x.toFixed(1)}" y1="${p.y.toFixed(1)}" x2="${sx.toFixed(1)}" y2="${sy.toFixed(1)}"></line>
+            <circle class="stnDot" cx="${sx.toFixed(1)}" cy="${sy.toFixed(1)}" r="2.6"></circle>
+            <text class="stnLab" x="${sx.toFixed(1)}" y="${(sy-5).toFixed(1)}">${s.n}</text>`;
+  }).join("");
+
+  // --- pins ---
+  $("gPins").innerHTML = P.map(p=>{
+    if(!visSet.has(p.i)) return "";
+    const b=bandOf(p), r = p.beds>=4?8:p.beds===3?7:6;
+    return `<g class="pin ${sel===p.i?'sel':''}" data-i="${p.i}" transform="translate(${p.x.toFixed(1)},${p.y.toFixed(1)})">
+              <circle class="halo" r="${r+4}"></circle>
+              <circle class="dot" r="${r}" fill="${b.c}"></circle>
+            </g>`;
+  }).join("");
+
+  // --- borough labels for boroughs holding a visible lot ---
+  const hot = new Set();
+  vis.forEach(p=>{
+    let best=null,bd=1e9;
+    for(const [n,c] of Object.entries(BORO_C)){
+      const d=Math.hypot(c[0]-p.x,c[1]-p.y); if(d<bd){bd=d;best=n}
+    }
+    if(best) hot.add(best);
+  });
+  $("gLab").innerHTML = [...hot].map(n=>{
+    const c=BORO_C[n];
+    return `<text class="borolab" x="${c[0]}" y="${c[1]}">${n.replace(" upon Thames","").replace(" and "," & ")}</text>`;
+  }).join("");
+  document.querySelectorAll('.boro').forEach(el=>
+    el.classList.toggle('hot', hot.has(el.dataset.name)));
+
+  // --- list ---
+  const sorted=[...vis].sort(cmp);
+  $("list").innerHTML = sorted.length ? sorted.map(p=>{
+    const b=bandOf(p), s=p.stns[0];
+    return `<div class="row ${sel===p.i?'sel':''}" data-i="${p.i}">
+      <div class="lot" style="background:${b.c}">${p.lot}</div>
+      <div>
+        <div class="addr">${p.addr}</div>
+        <div class="meta">${p.area} &middot; ${p.pc} &middot; ${p.beds} bed &middot; ${HOUSES[p.house].name}</div>
+        <div class="trans">${s?badges(s.m)+s.n:"&mdash;"}</div>
+      </div>
+      <div class="right">
+        <div class="price">${p.price}</div>
+        <div class="yrs" style="color:${b.c}">${p.yrs===null?"Lease n/d":p.yrs+" yrs"}</div>
+        <div class="walk">${s?p.walk+" min walk":""}</div>
+        ${p.m
+          ? `<div class="mgn ${marginClass(p.m.margin)}">${p.m.margin>0?"+":""}${p.m.margin.toFixed(0)}% margin</div>
+             <div class="allin">all-in ${fmtGBP(p.m.allIn)}</div>`
+          : `<div class="mgn mg-nd">not ranked</div>`}
+      </div>
+    </div>`;
+  }).join("") : `<div class="empty">No lots match these filters.</div>`;
+
+  renderDetail();
+  save();
+}
+
+/* Station marker position: true bearing from the lot, distance compressed
+   so the marker stays near its pin at any zoom. */
+function stationXY(p,s){
+  const [tx,ty] = proj(p.lon,p.lat);
+  const r = Math.min(34, 10 + s.d/70);
+  // derive a bearing from the lot's own coordinates so markers fan out
+  const ang = (p.lat*1000 + p.lon*1700) % (Math.PI*2);
+  return [p.x + Math.cos(ang)*r, p.y + Math.sin(ang)*r];
+}
+
+function cmp(a,b){
+  const big=1e4;
+  switch(S.sort){
+    // unranked lots (undisclosed lease) always sink to the bottom
+    case "margin": return (b.m?b.m.margin:-1e9)-(a.m?a.m.margin:-1e9);
+    case "allin":  return (a.m?a.m.allIn:1e12)-(b.m?b.m.allIn:1e12);
+    case "lease":  return (a.yrs??big)-(b.yrs??big);
+    case "leaseD": return (b.yrs??-1)-(a.yrs??-1);
+    case "price":  return a.priceN-b.priceN;
+    case "priceD": return b.priceN-a.priceN;
+    case "walk":   return a.walk-b.walk;
+    case "beds":   return b.beds-a.beds || (a.yrs??big)-(b.yrs??big);
+    case "date":   return HOUSES[a.house].order-HOUSES[b.house].order || (+a.lot)-(+b.lot);
+  }
+  return 0;
+}
+
+/* One-line read on how well connected a lot is. */
+function connectivity(p){
+  const s=p.stns[0]; if(!s) return "No station found within 2.5 km.";
+  const w=p.walk, tube=p.modes.includes("T"), eliz=p.modes.includes("E");
+  let t;
+  if(w<=7)       t="Very well connected — a short walk to the platform.";
+  else if(w<=12) t="Well connected for London; an easy walk.";
+  else if(w<=20) t="Workable, but a real walk — likely a bus or bike leg in practice.";
+  else           t="Poorly connected on foot. Expect a bus or car leg for every journey.";
+  if(eliz) t+=" Elizabeth line access is a genuine value driver here.";
+  else if(tube) t+=" Tube access widens the tenant pool.";
+  else t+=" National Rail only, so journey times depend on the timetable.";
+  return t;
+}
+
+/* The full workings, so the number can be argued with rather than trusted. */
+function valuationBlock(p){
+  const m=p.m;
+  if(!m) return `<div class="sect">
+      <div class="sectT">Ranking</div>
+      <div class="verdict">Not ranked. The auctioneer has not published the lease term,
+      so the extension premium cannot be estimated. The term is in the legal pack.</div>
+    </div>`;
+
+  const row=(k,v)=>`<div><dt>${k}</dt><dd>${v}</dd></div>`;
+  const ov = p.fhvpOverride
+    ? ` <button class="linkbtn" data-ovclr="${p.lot}">reset</button>` : "";
+
+  return `<div class="sect">
+    <div class="sectT">Ranking &mdash; ${m.extend?"buy and extend":"buy, don't extend"}</div>
+    <div class="headline ${marginClass(m.margin)}">
+      <span class="v">${m.margin>0?"+":""}${m.margin.toFixed(1)}%</span>
+      <span class="k">implied margin &middot; ${fmtGBP(m.equity)} equity</span>
+    </div>
+    <dl class="kv work">
+      ${row("Est. freehold value",
+            `<input class="ovin" type="number" step="5000" min="0"
+                    value="${Math.round(m.fhvp)}" data-ov="${p.lot}"
+                    aria-label="Freehold value override">${ov}`)}
+      ${p.fhvpOverride
+        ? row("Basis", "your figure")
+        : row(`${LOT_BORO[p.lot]} flats, ${LOT_DIST[p.lot]} adj.`,
+              `&times;${districtRatio(p).toFixed(2)} district &middot; &times;${(M.quality/100).toFixed(2)} condition`)}
+      ${row(`Existing lease &middot; ${(m.rel*100).toFixed(1)}% relativity`, fmtGBP(m.rel*m.fhvp))}
+      ${row("Ground rent capitalised", fmtGBP(m.term))}
+      ${row("Reversion", fmtGBP(m.reversion))}
+      ${row("Marriage value, your half",
+            p.yrs<80 ? fmtGBP(m.mv) : "none &mdash; above 80 years")}
+      ${row("<strong>Extension premium</strong>", `<strong>${fmtGBP(m.premium)}</strong>`)}
+      ${row(`Expected hammer, +${M.hammer}%`, fmtGBP(m.hammer))}
+      ${row("Fees, duty and costs", fmtGBP(m.buyCost-m.hammer))}
+      ${row("Premium + extension costs",
+            m.extend ? fmtGBP(m.premium+M.extCosts) : "not extending")}
+      ${row("<strong>All-in cost</strong>", `<strong>${fmtGBP(m.allIn)}</strong>`)}
+      ${row("Value once held", fmtGBP(m.endValue))}
+    </dl>
+  </div>`;
+}
+
+function renderDetail(){
+  const p=P.find(x=>x.i===sel);
+  if(!p || !visible().some(v=>v.i===sel)){
+    $("dBody").innerHTML=`<div class="dEmpty">Select a pin on the map or a lot from the list.</div>`;
+    return;
+  }
+  const b=bandOf(p), h=HOUSES[p.house];
+  const q=encodeURIComponent(`${p.addr}, ${p.area}, London ${p.pc}`);
+  $("dBody").innerHTML=`
+    <div class="dHead">
+      <span class="dLot" style="background:${b.c}">Lot ${p.lot}</span>
+      <div class="dAddr">${p.addr}</div>
+      <div class="dSub">${p.area}, London ${p.pc}</div>
+    </div>
+    <div class="dBand" style="background:${b.c}">
+      <div class="v">${p.yrs===null?"Not disclosed":p.yrs+" years"}</div>
+      <div class="k">Lease remaining</div>
+      <div class="note">${b.blurb}</div>
+    </div>
+    <dl class="kv">
+      <div><dt>Guide price</dt><dd>${p.price}</dd></div>
+      <div><dt>Bedrooms</dt><dd>${p.beds}</dd></div>
+      <div><dt>Auction house</dt><dd>${h.name}</dd></div>
+      <div><dt>Auction date</dt><dd>${h.date}</dd></div>
+      <div><dt>Postcode</dt><dd>${p.pc}</dd></div>
+    </dl>
+    ${valuationBlock(p)}
+    <div class="sect">
+      <div class="sectT">Transport</div>
+      ${p.stns.map(s=>`
+        <div class="stnCard">
+          <div class="n"><span>${s.n}</span><span class="w">${walkMin(s.d)} min &middot; ${s.d} m</span></div>
+          <div class="ln">${badges(s.m)}<br>${s.l}</div>
+        </div>`).join("")}
+      <div class="verdict">${connectivity(p)}</div>
+    </div>
+    ${p.note?`<div class="dNote">${p.note}</div>`:""}
+    <div class="dLinks">
+      <a class="btn pri" href="${p.url}" target="_blank" rel="noopener">View lot at ${h.name}</a>
+      <a class="btn" href="https://www.google.com/maps/search/?api=1&query=${q}" target="_blank" rel="noopener">Open in Google Maps</a>
+      <a class="btn" href="https://www.google.com/maps/dir/?api=1&origin=${p.lat},${p.lon}&destination=${encodeURIComponent(p.stns[0]?p.stns[0].n+" Station, London":p.pc)}&travelmode=walking" target="_blank" rel="noopener">Walking route to ${p.stns[0]?p.stns[0].n:"station"}</a>
+      <a class="btn" href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${p.lat},${p.lon}" target="_blank" rel="noopener">Street View</a>
+    </div>`;
+}
+
+/* =======================================================================
+   INTERACTION
+   ===================================================================== */
+$("leaseMode").addEventListener("click", e=>{
+  const b=e.target.closest("button"); if(!b)return;
+  S.leaseMode=b.dataset.mode; render();
+});
+$("fBands").addEventListener("change", e=>{
+  const v=e.target.value;
+  S.bands = e.target.checked ? [...S.bands,v] : S.bands.filter(x=>x!==v);
+  render();
+});
+$("lMin").addEventListener("input", e=>{
+  S.lMin=+e.target.value; if(S.lMin>S.lMax) S.lMax=S.lMin; render();
+});
+$("lMax").addEventListener("input", e=>{
+  S.lMax=+e.target.value; if(S.lMax<S.lMin) S.lMin=S.lMax; render();
+});
+$("lNd").addEventListener("change", e=>{ S.lNd=e.target.checked; render(); });
+$("fWalk").addEventListener("input", e=>{ S.walk=+e.target.value; render(); });
+$("fModes").addEventListener("click", e=>{
+  const c=e.target.closest(".chip"); if(!c)return;
+  const m=c.dataset.mode;
+  S.modes = S.modes.includes(m) ? S.modes.filter(x=>x!==m) : [...S.modes,m];
+  render();
+});
+$("fHouses").addEventListener("change", e=>{
+  const v=e.target.value;
+  S.houses = e.target.checked ? [...S.houses,v] : S.houses.filter(x=>x!==v);
+  render();
+});
+$("fBeds").addEventListener("click", e=>{
+  const c=e.target.closest(".chip"); if(!c)return;
+  const n=+c.dataset.beds;
+  S.beds = S.beds.includes(n) ? S.beds.filter(x=>x!==n) : [...S.beds,n];
+  render();
+});
+$("fPrice").addEventListener("input", e=>{ S.maxPrice=+e.target.value; render(); });
+$("sort").addEventListener("change", e=>{ S.sort=e.target.value; render(); });
+$("reset").addEventListener("click", ()=>{ S=clone(DEFAULTS); sel=null; hideTip(); fit(); render(); });
+$("tStn").addEventListener("click", ()=>{ S.showStn=!S.showStn; render(); });
+$("tTube").addEventListener("click", ()=>{ S.showTube=!S.showTube; render(); });
+
+/* ---- ranking model controls ---- */
+$("mBody").addEventListener("input", e=>{
+  const k=e.target.dataset.mk; if(!k) return;
+  M[k]=+e.target.value;
+  render();
+});
+$("mReset").addEventListener("click", ()=>{ M=clone(MODEL_DEFAULTS); render(); });
+
+/* Per-lot freehold override. Listening for 'change' rather than 'input' so
+   the field is not re-rendered out from under you mid-keystroke. */
+$("dBody").addEventListener("change", e=>{
+  const lot=e.target.dataset.ov; if(!lot) return;
+  const p=P.find(x=>x.lot===lot); if(!p) return;
+  const v=+e.target.value;
+  p.fhvpOverride = v>0 ? v : null;
+  render();
+});
+$("dBody").addEventListener("click", e=>{
+  const lot=e.target.dataset.ovclr; if(!lot) return;
+  const p=P.find(x=>x.lot===lot); if(!p) return;
+  p.fhvpOverride=null; render();
+});
+
+$("list").addEventListener("click", e=>{
+  const r=e.target.closest(".row"); if(!r)return;
+  sel=+r.dataset.i; render();
+  const p=P.find(x=>x.i===sel); if(p) focusOn(p);
+  if(isPhone()){ openSheet(); return; }
+  // open the card on the pin we just centred, so the listing link is to hand
+  requestAnimationFrame(()=>{
+    const ng=document.querySelector(`.pin[data-i="${sel}"]`);
+    if(ng) showTip(ng, true);
+  });
+});
+$("gPins").addEventListener("click", e=>{
+  const g=e.target.closest(".pin"); if(!g)return;
+  sel=+g.dataset.i;
+  render();                                  // re-renders pins, so re-find it
+  if(isPhone()){ openSheet(); return; }      // no hover on touch — show the sheet
+  const ng=document.querySelector(`.pin[data-i="${sel}"]`);
+  if(ng) showTip(ng, true);                  // keep the card open and clickable
+});
+
+/* ----------------------------------------------------------------------
+   Hover card. The card is an <a>, so the whole thing links straight to the
+   advertised lot at the auctioneer. It stays open while the pointer travels
+   from the pin onto it, and clicking a pin pins it open ("sticky") so the
+   link is there to click without having to keep the cursor steady.
+   A plain anchor is used deliberately: scripted window.open is blocked in
+   the sandboxed frame this page runs in, an <a target="_blank"> is not.
+   -------------------------------------------------------------------- */
+const tip=$("tip"), mapEl=$("map"), mapWrap=mapEl.parentElement;
+let tipHide=null, tipFor=null, tipSticky=false;
+
+function showTip(g, sticky){
+  const p=P.find(x=>x.i===+g.dataset.i); if(!p) return;
+  clearTimeout(tipHide);
+  if(sticky) tipSticky=true;
+
+  if(tipFor!==p.i){
+    const s=p.stns[0];
+    tip.href=p.url;
+    tip.innerHTML=
+      `<b>Lot ${p.lot} &middot; ${p.addr}</b>
+       <span class="s">${p.area} &middot; ${p.pc}<br>
+         ${p.price} &middot; ${p.beds} bed &middot; ${p.yrs===null?"lease not disclosed":p.yrs+" years remaining"}
+         ${s?`<br>${p.walk} min walk to ${s.n}`:""}</span>
+       <span class="go"><u>View listing at ${HOUSES[p.house].name}</u><span>&#8599;</span></span>`;
+    tipFor=p.i;
+  }
+
+  // anchor above the pin, flipping below and clamping if short of room
+  const gr=g.getBoundingClientRect(), wr=mapWrap.getBoundingClientRect();
+  tip.classList.add("on");
+  const th=tip.offsetHeight, tw=tip.offsetWidth;
+  let y=gr.top-wr.top-8;
+  if(y-th<4) y=gr.bottom-wr.top+th+14;
+  const x=gr.left+gr.width/2-wr.left;
+  tip.style.left=Math.max(tw/2+6, Math.min(wr.width-tw/2-6, x))+"px";
+  tip.style.top=y+"px";
+}
+function hideTip(){ tip.classList.remove("on"); tipFor=null; tipSticky=false; }
+function queueHide(){
+  if(tipSticky) return;
+  clearTimeout(tipHide);
+  tipHide=setTimeout(()=>{ tip.classList.remove("on"); tipFor=null; }, 260);
+}
+
+$("gPins").addEventListener("mouseover", e=>{ const g=e.target.closest(".pin"); if(g) showTip(g,false); });
+$("gPins").addEventListener("mouseout",  e=>{ if(e.target.closest(".pin")) queueHide(); });
+tip.addEventListener("mouseenter", ()=>clearTimeout(tipHide));
+tip.addEventListener("mouseleave", queueHide);
+// any press on the map clears a pinned card; a pin click re-opens it below
+mapEl.addEventListener("pointerdown", hideTip);
+
+/* Pan + zoom */
+let T={x:0,y:0,k:1};
+const vp=$("vp");
+const apply=()=>vp.setAttribute("transform",`translate(${T.x} ${T.y}) scale(${T.k})`);
+const fit=()=>{T={x:0,y:0,k:1};apply()};
+/* Zoom to an absolute scale about a point, keeping that point still.
+   Pinch needs the absolute form; the buttons and wheel use the factor form. */
+function zoomTo(cx,cy,newK){
+  const k=Math.min(8,Math.max(1,newK)), r=k/T.k;
+  T.x=cx-(cx-T.x)*r; T.y=cy-(cy-T.y)*r; T.k=k;
+  if(T.k<=1.001){ T.k=1; T.x=0; T.y=0; }
+  apply();
+}
+const zoomAt=(cx,cy,f)=>zoomTo(cx,cy,T.k*f);
+function focusOn(p){
+  const k=Math.max(T.k,3.2);
+  T.k=k; T.x=MW/2-p.x*k; T.y=MH/2-p.y*k; apply();
+}
+$("zIn").onclick=()=>{hideTip();zoomAt(MW/2,MH/2,1.5)};
+$("zOut").onclick=()=>{hideTip();zoomAt(MW/2,MH/2,1/1.5)};
+$("zFit").onclick=()=>{hideTip();fit()};
+
+/* Screen pixels to viewBox units. The SVG letterboxes (preserveAspectRatio
+   defaults to xMidYMid meet) once the phone layout gives it a fixed height,
+   so the naive width-ratio conversion would be wrong there. */
+function mapScale(){
+  const r=mapEl.getBoundingClientRect();
+  return {r, s:Math.min(r.width/MW, r.height/MH)};
+}
+function toMap(cx,cy){
+  const {r,s}=mapScale();
+  return [ (cx-r.left-(r.width-MW*s)/2)/s, (cy-r.top-(r.height-MH*s)/2)/s ];
+}
+
+mapEl.addEventListener("wheel", e=>{
+  e.preventDefault();
+  hideTip();
+  const [mx,my]=toMap(e.clientX,e.clientY);
+  zoomAt(mx,my, e.deltaY<0?1.18:1/1.18);
+},{passive:false});
+
+/* One finger pans, two fingers pinch. Tracking pointers in a map rather than
+   a single drag object is what makes the pinch case work on a phone. */
+const ptrs=new Map();
+let drag=null, pinch=null;
+
+mapEl.addEventListener("pointerdown", e=>{
+  mapEl.setPointerCapture(e.pointerId);
+  ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(ptrs.size===1){
+    drag={px:e.clientX,py:e.clientY,x:T.x,y:T.y};
+    mapEl.classList.add("drag");
+  }else if(ptrs.size===2){
+    drag=null; mapEl.classList.remove("drag");
+    const [a,b]=[...ptrs.values()];
+    const mid=toMap((a.x+b.x)/2,(a.y+b.y)/2);
+    pinch={d0:Math.hypot(a.x-b.x,a.y-b.y)||1, k0:T.k, mx:mid[0], my:mid[1]};
+  }
+});
+
+mapEl.addEventListener("pointermove", e=>{
+  if(!ptrs.has(e.pointerId)) return;
+  ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+
+  if(pinch && ptrs.size>=2){
+    const [a,b]=[...ptrs.values()];
+    const d=Math.hypot(a.x-b.x,a.y-b.y)||1;
+    zoomTo(pinch.mx, pinch.my, pinch.k0*(d/pinch.d0));
+    return;
+  }
+  if(drag){
+    const {s}=mapScale();
+    T.x=drag.x+(e.clientX-drag.px)/s;
+    T.y=drag.y+(e.clientY-drag.py)/s;
+    apply();
+  }
+});
+
+["pointerup","pointercancel"].forEach(ev=>
+  mapEl.addEventListener(ev, e=>{
+    ptrs.delete(e.pointerId);
+    if(ptrs.size<2) pinch=null;
+    if(ptrs.size===0){ drag=null; mapEl.classList.remove("drag"); }
+  }));
+
+/* ======================================================================
+   PHONE LAYER
+   One section at a time from the tab bar, and the lot detail as a sheet.
+   ==================================================================== */
+const isPhone = () => typeof window.matchMedia === "function"
+  ? window.matchMedia("(max-width:760px)").matches
+  : window.innerWidth <= 760;
+const TABS=["map","list","filters","model"];
+
+function setTab(t){
+  if(!TABS.includes(t)) t="map";
+  S.tab=t;
+  TABS.forEach(x=>document.body.classList.toggle("t-"+x, x===t));
+  [...$("tabbar").querySelectorAll("button")].forEach(b=>
+    b.setAttribute("aria-pressed", String(b.dataset.tab===t)));
+  save();
+}
+$("tabbar").addEventListener("click", e=>{
+  const b=e.target.closest("button"); if(!b) return;
+  setTab(b.dataset.tab);
+  closeSheet();
+  window.scrollTo({top:0,behavior:"smooth"});
+});
+
+function openSheet(){ if(isPhone()) document.body.classList.add("sheet-open"); }
+function closeSheet(){ document.body.classList.remove("sheet-open"); }
+$("sheetBack").addEventListener("click", closeSheet);
+$("sheetClose").addEventListener("click", closeSheet);
+
+/* swipe the sheet down to dismiss, grabbing only its handle or header so
+   the scrollable body underneath still scrolls normally */
+const sheet=$("detail");
+let shStart=null;
+sheet.addEventListener("touchstart", e=>{
+  if(!isPhone() || !document.body.classList.contains("sheet-open")) return;
+  if(!e.target.closest(".grab") && !e.target.closest(".hd")) return;
+  shStart=e.touches[0].clientY;
+},{passive:true});
+sheet.addEventListener("touchmove", e=>{
+  if(shStart===null) return;
+  const dy=e.touches[0].clientY-shStart;
+  if(dy>0) sheet.style.transform=`translateY(${dy}px)`;
+},{passive:true});
+sheet.addEventListener("touchend", e=>{
+  if(shStart===null) return;
+  const dy=e.changedTouches[0].clientY-shStart;
+  sheet.style.transform="";
+  if(dy>90) closeSheet();
+  shStart=null;
+},{passive:true});
+
+setTab(S.tab||"map");
+
+/* Exposed so the arithmetic can be checked from the console, and so the
+   build's test suite can exercise the model directly:
+     __model.model(__model.P.find(p=>p.lot==="14"), __model.assumptions())  */
+window.__model = {
+  P, model, relativity, fhvpOf, districtRatio,
+  assumptions: ()=>M,
+  MODEL_DEFAULTS, BORO_FLAT, BORO_ALL, LOT_BORO, LOT_DIST, DIST_MEDIAN,
+  REL_ANCHORS, BED_FACTOR
+};
+
+/* Offline support, for when this page is served from your own host.
+   Service workers are blocked inside the claude.ai artifact frame, so this
+   is best-effort and stays silent when it cannot register. */
+try{
+  if("serviceWorker" in navigator && location.protocol==="https:"){
+    window.addEventListener("load", ()=>{
+      navigator.serviceWorker.register("sw.js").catch(()=>{});
+    });
+  }
+}catch(e){}
+
+render();
+</script>
+</body>
+</html>
