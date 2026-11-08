@@ -1153,6 +1153,23 @@ function connectivity(p){
   return t;
 }
 
+/* External links.
+
+   An installed iOS web app (standalone mode) frequently ignores
+   target="_blank" altogether — the tap simply does nothing. A plain
+   navigation works: iOS opens it in an in-app browser with a Done button
+   that returns you here. In a normal browser tab a new tab is still nicer,
+   so the attribute is decided at render time. */
+function isStandalone(){
+  try{
+    if(window.navigator.standalone===true) return true;
+    if(typeof window.matchMedia==="function" &&
+       window.matchMedia("(display-mode: standalone)").matches) return true;
+  }catch(_){}
+  return false;
+}
+const extAttrs = () => isStandalone() ? '' : ' target="_blank" rel="noopener"';
+
 /* The full workings, so the number can be argued with rather than trusted. */
 function valuationBlock(p){
   const m=p.m;
@@ -1211,7 +1228,7 @@ function renderDetail(){
       <div class="dAddr">${p.addr}</div>
       <div class="dSub">${p.area}, London ${p.pc}</div>
     </div>
-    <a class="dCta" href="${p.url}" target="_blank" rel="noopener">
+    <a class="dCta" href="${p.url}"${extAttrs()}>
       <span>
         <span class="m">View full listing</span>
         <span class="s">${h.name} &middot; ${h.date}</span>
@@ -1242,9 +1259,9 @@ function renderDetail(){
     </div>
     ${p.note?`<div class="dNote">${p.note}</div>`:""}
     <div class="dLinks">
-      <a class="btn" href="https://www.google.com/maps/search/?api=1&query=${q}" target="_blank" rel="noopener">Open in Google Maps</a>
-      <a class="btn" href="https://www.google.com/maps/dir/?api=1&origin=${p.lat},${p.lon}&destination=${encodeURIComponent(p.stns[0]?p.stns[0].n+" Station, London":p.pc)}&travelmode=walking" target="_blank" rel="noopener">Walking route to ${p.stns[0]?p.stns[0].n:"station"}</a>
-      <a class="btn" href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${p.lat},${p.lon}" target="_blank" rel="noopener">Street View</a>
+      <a class="btn" href="https://www.google.com/maps/search/?api=1&query=${q}"${extAttrs()}>Open in Google Maps</a>
+      <a class="btn" href="https://www.google.com/maps/dir/?api=1&origin=${p.lat},${p.lon}&destination=${encodeURIComponent(p.stns[0]?p.stns[0].n+" Station, London":p.pc)}&travelmode=walking"${extAttrs()}>Walking route to ${p.stns[0]?p.stns[0].n:"station"}</a>
+      <a class="btn" href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${p.lat},${p.lon}"${extAttrs()}>Street View</a>
     </div>`;
 }
 
@@ -1308,14 +1325,6 @@ $("dBody").addEventListener("change", e=>{
   p.fhvpOverride = v>0 ? v : null;
   render();
 });
-/* Safety net for the listing link. If a browser quirk suppresses the
-   anchor's default navigation, this drives it from the same user gesture. */
-$("dBody").addEventListener("click", e=>{
-  const cta=e.target.closest("a.dCta");
-  if(cta && cta.href && !e.defaultPrevented){
-    setTimeout(()=>{ try{ window.location.href=cta.href; }catch(_){} }, 350);
-  }
-});
 $("dBody").addEventListener("click", e=>{
   const lot=e.target.dataset.ovclr; if(!lot) return;
   const p=P.find(x=>x.lot===lot); if(!p) return;
@@ -1361,6 +1370,8 @@ function showTip(g, sticky){
   if(tipFor!==p.i){
     const s=p.stns[0];
     tip.href=p.url;
+    if(isStandalone()){ tip.removeAttribute("target"); }
+    else { tip.setAttribute("target","_blank"); tip.setAttribute("rel","noopener"); }
     tip.innerHTML=
       `<b>Lot ${p.lot} &middot; ${p.addr}</b>
        <span class="s">${p.area} &middot; ${p.pc}<br>
